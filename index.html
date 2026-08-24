@@ -436,7 +436,7 @@
             <div class="desktop-table-view table-responsive">
               <table class="table table-bordered table-sm text-center align-middle table-hover">
                 <thead class="table-light">
-                  <tr><th>Date</th><th>Weight</th><th>BMI</th><th>VFA</th><th>Fat %</th><th>Age</th><th>R.M.</th><th>S.M. %</th><th>Waist</th><th>Slip</th><th>Del</th></tr>
+                  <tr><th>Date</th><th>Name</th><th>Weight</th><th>BMI</th><th>VFA</th><th>Fat %</th><th>Age</th><th>R.M.</th><th>S.M. %</th><th>Waist</th><th>Slip</th><th>Del</th></tr>
                 </thead>
                 <tbody id="bmiTableBody"></tbody>
               </table>
@@ -597,7 +597,7 @@
         </div>
         <div class="p-3 bg-danger bg-opacity-10 border border-danger rounded">
           <h6 class="text-danger fw-bold mb-1"><i class="fa-solid fa-skull-crossbones me-1"></i> Master Cloud Data Reset (All-in-One)</h6>
-          <p class="small text-muted mb-3">Ek hi click mein Cloud ka saara data hamesha ke liye delete ho jayega.</p>
+          <p class="small text-muted mb-3">Ek hi click mein Cloud ka saara data (Consumers, Diet, Attendance, Evaluation, Products) hamesha ke liye delete ho jayega.</p>
           <button class="btn btn-danger fw-bold px-4 shadow-sm" onclick="executeMasterReset()"><i class="fa-solid fa-trash-can me-2"></i> MASTER RESET ALL DATA</button>
         </div>
       </div>
@@ -819,7 +819,7 @@
     let checkupData = {};
     let bmiRecords = [];
     let salesRecords = [];
-    let adminPass = null; // null means no custom password set yet
+    let adminPass = null;
 
     let currentUser = JSON.parse(sessionStorage.getItem('bwc_session_user')) || null;
     let selectedCoachFilter = 'ALL';
@@ -846,9 +846,19 @@
       db.ref('settings/adminPass').on('value', snap => { 
         adminPass = snap.val() || null;
       });
-      db.ref('coaches').on('value', snap => { coaches = snap.val() ? Object.values(snap.val()) : []; updateCoachDropdowns(); renderCoaches(); });
-      db.ref('consumers').on('value', snap => { consumers = snap.val() ? Object.values(snap.val()) : []; refreshUI(); });
-      db.ref('attendance').on('value', snap => { attendanceData = snap.val() || {}; renderAttendance(); });
+      db.ref('coaches').on('value', snap => { 
+        coaches = snap.val() ? Object.values(snap.val()) : []; 
+        updateCoachDropdowns(); 
+        renderCoaches(); 
+      });
+      db.ref('consumers').on('value', snap => { 
+        consumers = snap.val() ? Object.values(snap.val()) : []; 
+        refreshUI(); 
+      });
+      db.ref('attendance').on('value', snap => { 
+        attendanceData = snap.val() || {}; 
+        renderAttendance(); 
+      });
       db.ref('btg').on('value', snap => { 
         btgData = snap.val() || {}; 
         renderBTG(); 
@@ -858,7 +868,11 @@
         bmiRecords = snap.val() ? Object.values(snap.val()) : []; 
         renderBMIHistory(); 
       });
-      db.ref('checkups').on('value', snap => { checkupData = snap.val() || {}; renderCheckup(); updateCheckupNotifications(); });
+      db.ref('checkups').on('value', snap => { 
+        checkupData = snap.val() || {}; 
+        renderCheckup(); 
+        updateCheckupNotifications(); 
+      });
       db.ref('salesRecords').on('value', snap => {
         salesRecords = snap.val() ? Object.values(snap.val()) : [];
         renderSalesHistory();
@@ -936,7 +950,6 @@
       const inputPass = document.getElementById('loginPasswordInput').value.trim();
 
       if (role === 'ADMIN') {
-        // DYNAMIC AUTH: agar cloud me password save hai toh sirf wahi chalega, agar blank hai toh 1234
         const expectedPass = adminPass ? adminPass : "1234";
 
         if (inputPass === expectedPass) {
@@ -981,13 +994,14 @@
       if (!newP) return alert('Naya password likhein!');
       db.ref('settings/adminPass').set(newP).then(() => {
         adminPass = newP;
-        alert('Master Admin Password badal diya gaya hai! Ab sirf naya password hi chalega.');
+        alert('Master Admin Password badal diya gaya hai!');
         document.getElementById('newAdminPasswordInput').value = '';
       }).catch(err => {
         alert('Password update failed: ' + err.message);
       });
     }
 
+    // 100% RELIABLE MASTER CLOUD RESET
     function executeMasterReset() {
       const confirmAuth = prompt("⚠️ DANGER: Kya aap Cloud ka SAARA DATA reset karna chahte hain?\nConfirm karne ke liye apna Master Admin Password likhein:");
       if (!confirmAuth) return;
@@ -995,14 +1009,35 @@
       const expectedPass = adminPass ? adminPass : "1234";
 
       if (confirmAuth.trim() === expectedPass) {
-        db.ref('consumers').remove();
-        db.ref('coaches').remove();
-        db.ref('attendance').remove();
-        db.ref('btg').remove();
-        db.ref('bmiRecords').remove();
-        db.ref('checkups').remove();
-        db.ref('salesRecords').remove();
-        alert('Master Reset Complete! Saara data safalta-purvak reset ho gaya hai.');
+        // Clear all data nodes simultaneously on Firebase
+        const wipeUpdates = {
+          'consumers': null,
+          'coaches': null,
+          'attendance': null,
+          'btg': null,
+          'bmiRecords': null,
+          'checkups': null,
+          'salesRecords': null
+        };
+
+        db.ref().update(wipeUpdates).then(() => {
+          // Clear memory state
+          consumers = [];
+          coaches = [];
+          attendanceData = {};
+          btgData = {};
+          bmiRecords = [];
+          checkupData = {};
+          salesRecords = [];
+          localStorage.removeItem('bwc_dismissed_notifications');
+          dismissedCheckups = [];
+
+          refreshUI();
+          alert('✅ Master Reset Complete! Saara cloud data safalta-purvak delete ho gaya hai.');
+          window.location.reload();
+        }).catch(err => {
+          alert('Reset Error: ' + err.message);
+        });
       } else {
         alert('Galat Password! Reset cancel kar diya gaya.');
       }
