@@ -205,7 +205,7 @@
         </div>
         <div class="mb-4 text-start">
           <label class="form-label small fw-bold text-dark">Security PIN / Password</label>
-          <input type="password" id="loginPasswordInput" class="form-control" required placeholder="Enter Security Password">
+          <input type="password" id="loginPasswordInput" class="form-control" required placeholder="Default: 1234">
         </div>
         <button type="submit" class="btn btn-success w-100 py-2 fw-bold shadow-sm">
           <i class="fa-solid fa-right-to-bracket me-2"></i> Login to Portal
@@ -843,7 +843,10 @@
     initCloudListeners();
 
     function initCloudListeners() {
-      db.ref('settings/adminPass').on('value', snap => { if(snap.val()) adminPass = snap.val(); });
+      db.ref('settings/adminPass').on('value', snap => { 
+        if (snap.val()) adminPass = snap.val(); 
+        else adminPass = "1234";
+      });
       db.ref('coaches').on('value', snap => { coaches = snap.val() ? Object.values(snap.val()) : []; updateCoachDropdowns(); renderCoaches(); });
       db.ref('consumers').on('value', snap => { consumers = snap.val() ? Object.values(snap.val()) : []; refreshUI(); });
       db.ref('attendance').on('value', snap => { attendanceData = snap.val() || {}; renderAttendance(); });
@@ -934,7 +937,8 @@
       const inputPass = document.getElementById('loginPasswordInput').value.trim();
 
       if (role === 'ADMIN') {
-        if (inputPass === adminPass) {
+        // ALWAYS ALLOW 1234 OR THE CLOUD SAVED PASSWORD
+        if (inputPass === adminPass || inputPass === "1234") {
           currentUser = { id: 'ADMIN', name: 'Master Admin', role: 'ADMIN' };
           sessionStorage.setItem('bwc_session_user', JSON.stringify(currentUser));
           document.getElementById('authOverlay').style.display = 'none';
@@ -943,7 +947,7 @@
           checkDeviceView();
           this.reset();
         } else {
-          alert('Incorrect Password! Kripya sahi PIN/Password dalein.');
+          alert('Incorrect Password! Master Admin ke liye "1234" dalein.');
         }
       } else {
         const inputUsername = document.getElementById('loginCoachUsername').value.trim();
@@ -974,8 +978,9 @@
     function updateAdminPassword() {
       const newP = document.getElementById('newAdminPasswordInput').value.trim();
       if (!newP) return alert('Naya password likhein!');
+      adminPass = newP;
       db.ref('settings/adminPass').set(newP);
-      alert('Admin Password updated!');
+      alert('Admin Password updated to: ' + newP);
       document.getElementById('newAdminPasswordInput').value = '';
     }
 
@@ -983,7 +988,7 @@
       const confirmAuth = prompt("⚠️ DANGER: Kya aap Cloud ka SAARA DATA reset karna chahte hain?\nConfirm karne ke liye apna Master Admin Password likhein:");
       if (!confirmAuth) return;
 
-      if (confirmAuth.trim() === adminPass) {
+      if (confirmAuth.trim() === adminPass || confirmAuth.trim() === "1234") {
         db.ref('consumers').remove();
         db.ref('coaches').remove();
         db.ref('attendance').remove();
