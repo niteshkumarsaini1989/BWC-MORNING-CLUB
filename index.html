@@ -1001,6 +1001,19 @@
       });
     }
 
+    // COACH PIN CHANGE FUNCTION
+    function updateCoachPassword(coachId, currentPhone) {
+      const newPin = prompt(`Coach (${currentPhone}) ke liye naya Password/PIN darj karein:`);
+      if (!newPin) return;
+      if (newPin.trim().length < 3) return alert('PIN kam se kam 3 anko ka hona chahiye!');
+
+      db.ref('coaches/' + coachId + '/password').set(newPin.trim()).then(() => {
+        alert('✅ Coach ka PIN safalta-purvak update ho gaya hai!');
+      }).catch(err => {
+        alert('Error: ' + err.message);
+      });
+    }
+
     // 100% RELIABLE MASTER CLOUD RESET
     function executeMasterReset() {
       const confirmAuth = prompt("⚠️ DANGER: Kya aap Cloud ka SAARA DATA reset karna chahte hain?\nConfirm karne ke liye apna Master Admin Password likhein:");
@@ -1009,7 +1022,6 @@
       const expectedPass = adminPass ? adminPass : "1234";
 
       if (confirmAuth.trim() === expectedPass) {
-        // Clear all data nodes simultaneously on Firebase
         const wipeUpdates = {
           'consumers': null,
           'coaches': null,
@@ -1021,12 +1033,11 @@
         };
 
         db.ref().update(wipeUpdates).then(() => {
-          // Clear memory state
           consumers = [];
           coaches = [];
           attendanceData = {};
           btgData = {};
-          bmiRecords = [];
+          bmiRecords = {};
           checkupData = {};
           salesRecords = [];
           localStorage.removeItem('bwc_dismissed_notifications');
@@ -2029,10 +2040,16 @@
         const count = consumers.filter(c => c.coachId === co.id).length;
         tbody.innerHTML += `
           <tr>
-            <td>${index + 1}</td><td><span class="badge bg-secondary">${co.code}</span></td>
-            <td class="fw-bold">${co.name}</td><td>${co.phone}</td><td><code>${co.password || '****'}</code></td>
+            <td>${index + 1}</td>
+            <td><span class="badge bg-secondary">${co.code}</span></td>
+            <td class="fw-bold">${co.name}</td>
+            <td>${co.phone}</td>
+            <td><code>${co.password || '****'}</code></td>
             <td><span class="badge bg-success">${count} Members</span></td>
-            <td><button class="btn btn-sm btn-outline-danger" onclick="db.ref('coaches/' + '${co.id}').remove()"><i class="fa-solid fa-trash"></i></button></td>
+            <td>
+              <button class="btn btn-sm btn-outline-warning py-0 px-2 me-1" onclick="updateCoachPassword('${co.id}', '${co.phone}')" title="Change PIN"><i class="fa-solid fa-key"></i></button>
+              <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="db.ref('coaches/' + '${co.id}').remove()" title="Delete Coach"><i class="fa-solid fa-trash"></i></button>
+            </td>
           </tr>
         `;
       });
