@@ -484,17 +484,35 @@
                 <label class="form-label small fw-bold">Date *</label>
                 <input type="date" id="salesDate" class="form-control form-control-sm" required>
               </div>
-              <div class="mb-2">
-                <label class="form-label small fw-bold">Type Product Keyword (e.g. nit, ku, f1, vanilla) *</label>
-                <input type="text" id="salesProductSearchInput" list="masterProductsDatalist" class="form-control form-control-sm fw-bold border-primary" placeholder="Type keyword & press Tab..." required onkeydown="handleProductTabKey(event)" onchange="onProductSearchSelect()" oninput="onProductSearchSelect()">
-                <datalist id="masterProductsDatalist"></datalist>
-                <input type="hidden" id="salesSelectedProductId" value="">
+
+              <!-- MULTI-PRODUCT DYNAMIC LIST CONTAINER -->
+              <div id="dynamicProductRowsContainer">
+                <div class="product-row-item p-2 mb-2 bg-light border rounded position-relative">
+                  <div class="mb-1">
+                    <label class="form-label small fw-bold text-dark mb-0">Product Keyword / Name *</label>
+                    <input type="text" class="form-control form-control-sm fw-bold border-primary salesProductSearchInput" list="masterProductsDatalist" placeholder="Type keyword & press Tab..." required onkeydown="handleProductTabKey(event)" onchange="onProductSearchSelect(this)" oninput="onProductSearchSelect(this)">
+                    <input type="hidden" class="salesSelectedProductId" value="">
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <div style="flex-grow:1;">
+                      <label class="form-label small fw-bold text-dark mb-0">Quantity *</label>
+                      <input type="number" class="form-control form-control-sm salesQty" min="1" value="1" required>
+                    </div>
+                    <div style="padding-top:18px;">
+                      <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="removeProductRow(this)" title="Remove Item"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="mb-3">
-                <label class="form-label small fw-bold">Quantity *</label>
-                <input type="number" id="salesQty" class="form-control form-control-sm" min="1" value="1" required>
-              </div>
-              <button type="submit" class="btn btn-warning w-100 fw-bold shadow-sm"><i class="fa-solid fa-plus me-1"></i> Save Product Entry</button>
+              <datalist id="masterProductsDatalist"></datalist>
+
+              <button type="button" class="btn btn-outline-success btn-sm w-100 fw-bold mb-2" onclick="addProductRowItem()">
+                <i class="fa-solid fa-plus me-1"></i> Add Another Product (Multi-Add)
+              </button>
+
+              <button type="submit" class="btn btn-warning w-100 fw-bold shadow-sm py-2">
+                <i class="fa-solid fa-floppy-disk me-1"></i> Save All Product Entries
+              </button>
             </form>
           </div>
         </div>
@@ -1771,7 +1789,7 @@
         tbody.innerHTML += `
           <tr>
             <td>${r.date}</td>
-            <td class="fw-bold text-start clickable-link" onclick="generateBMIReportOnly(${c.id})">${c.name}</td>
+            <td>${c.name}</td>
             <td class="text-success fw-bold">${r.weight} kg</td>
             <td>${r.bmi}</td>
             <td>${r.vfa}</td>
@@ -1878,7 +1896,7 @@
       alert('Checkup Saved!');
     }
 
-    // 6. PRODUCT TRACKING ENGINE WITH TAB-AUTOCOMPLETE & KEYWORD MATCHING
+    // 6. MULTI-PRODUCT TRACKING ENGINE
     function populateMasterProductsDatalist() {
       const dlist = document.getElementById('masterProductsDatalist');
       dlist.innerHTML = '';
@@ -1899,56 +1917,119 @@
 
     function handleProductTabKey(e) {
       if (e.key === 'Tab') {
-        const input = document.getElementById('salesProductSearchInput');
+        const input = e.target;
         const typedVal = input.value.trim();
         if (typedVal.length > 0) {
           const matched = findMatchingProduct(typedVal);
           if (matched) {
             input.value = matched.name;
-            document.getElementById('salesSelectedProductId').value = matched.id;
+            const parentRow = input.closest('.product-row-item');
+            const hiddenId = parentRow.querySelector('.salesSelectedProductId');
+            if (hiddenId) hiddenId.value = matched.id;
           }
         }
       }
     }
 
-    function onProductSearchSelect() {
-      const input = document.getElementById('salesProductSearchInput');
-      const searchVal = input.value.trim().toLowerCase();
+    function onProductSearchSelect(inputElement) {
+      const searchVal = inputElement.value.trim().toLowerCase();
       const matched = findMatchingProduct(searchVal);
+      const parentRow = inputElement.closest('.product-row-item');
+      const hiddenId = parentRow.querySelector('.salesSelectedProductId');
 
-      if (matched) {
-        document.getElementById('salesSelectedProductId').value = matched.id;
+      if (matched && hiddenId) {
+        hiddenId.value = matched.id;
+      } else if (hiddenId) {
+        hiddenId.value = '';
+      }
+    }
+
+    function addProductRowItem() {
+      const container = document.getElementById('dynamicProductRowsContainer');
+      const newRow = document.createElement('div');
+      newRow.className = 'product-row-item p-2 mb-2 bg-light border rounded position-relative';
+      newRow.innerHTML = `
+        <div class="mb-1">
+          <label class="form-label small fw-bold text-dark mb-0">Product Keyword / Name *</label>
+          <input type="text" class="form-control form-control-sm fw-bold border-primary salesProductSearchInput" list="masterProductsDatalist" placeholder="Type keyword & press Tab..." required onkeydown="handleProductTabKey(event)" onchange="onProductSearchSelect(this)" oninput="onProductSearchSelect(this)">
+          <input type="hidden" class="salesSelectedProductId" value="">
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <div style="flex-grow:1;">
+            <label class="form-label small fw-bold text-dark mb-0">Quantity *</label>
+            <input type="number" class="form-control form-control-sm salesQty" min="1" value="1" required>
+          </div>
+          <div style="padding-top:18px;">
+            <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="removeProductRow(this)" title="Remove Item"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>
+      `;
+      container.appendChild(newRow);
+    }
+
+    function removeProductRow(btn) {
+      const container = document.getElementById('dynamicProductRowsContainer');
+      if (container.children.length > 1) {
+        btn.closest('.product-row-item').remove();
       } else {
-        document.getElementById('salesSelectedProductId').value = '';
+        alert('Kam se kam ek product hona zaroori hai!');
       }
     }
 
     document.getElementById('salesDispatchForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const cid = parseInt(document.getElementById('salesConsumerSelect').value);
-      const searchInput = document.getElementById('salesProductSearchInput').value.trim();
-      if (!cid || !searchInput) return alert('Kripya valid Consumer aur Product select karein!');
+      const dateVal = document.getElementById('salesDate').value;
+      if (!cid || !dateVal) return alert('Kripya Consumer aur Date select karein!');
 
-      const matched = findMatchingProduct(searchInput);
-      const productName = matched ? matched.name : searchInput;
-      const qty = parseInt(document.getElementById('salesQty').value) || 1;
+      const rowItems = document.querySelectorAll('.product-row-item');
+      if (rowItems.length === 0) return alert('Kam se kam ek product add karein!');
 
-      const salesId = Date.now();
-      const salesRecord = {
-        id: salesId,
-        consumerId: cid,
-        date: document.getElementById('salesDate').value,
-        productName: productName,
-        qty: qty
-      };
+      let successCount = 0;
+      rowItems.forEach(row => {
+        const searchInput = row.querySelector('.salesProductSearchInput').value.trim();
+        const qty = parseInt(row.querySelector('.salesQty').value) || 1;
+        if (searchInput) {
+          const matched = findMatchingProduct(searchInput);
+          const productName = matched ? matched.name : searchInput;
+          const salesId = Date.now() + Math.floor(Math.random() * 1000);
+          
+          const salesRecord = {
+            id: salesId,
+            consumerId: cid,
+            date: dateVal,
+            productName: productName,
+            qty: qty
+          };
+          db.ref('salesRecords/' + salesId).set(salesRecord);
+          successCount++;
+        }
+      });
 
-      db.ref('salesRecords/' + salesId).set(salesRecord);
-      this.reset();
-      document.getElementById('salesDate').value = todayStr;
-      document.getElementById('salesQty').value = '1';
-      document.getElementById('salesProductSearchInput').value = '';
-      document.getElementById('salesSelectedProductId').value = '';
-      alert('Product Tracking Entry Saved Successfully!');
+      if (successCount > 0) {
+        this.reset();
+        document.getElementById('salesDate').value = todayStr;
+        // Reset rows to default 1 row
+        document.getElementById('dynamicProductRowsContainer').innerHTML = `
+          <div class="product-row-item p-2 mb-2 bg-light border rounded position-relative">
+            <div class="mb-1">
+              <label class="form-label small fw-bold text-dark mb-0">Product Keyword / Name *</label>
+              <input type="text" class="form-control form-control-sm fw-bold border-primary salesProductSearchInput" list="masterProductsDatalist" placeholder="Type keyword & press Tab..." required onkeydown="handleProductTabKey(event)" onchange="onProductSearchSelect(this)" oninput="onProductSearchSelect(this)">
+              <input type="hidden" class="salesSelectedProductId" value="">
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <div style="flex-grow:1;">
+                <label class="form-label small fw-bold text-dark mb-0">Quantity *</label>
+                <input type="number" class="form-control form-control-sm salesQty" min="1" value="1" required>
+              </div>
+              <div style="padding-top:18px;">
+                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="removeProductRow(this)" title="Remove Item"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </div>
+          </div>
+        `;
+        alert(`🎉 Sabhi ${successCount} products safalta-purvak save ho gaye hain!`);
+      }
     });
 
     function renderSalesHistory() {
