@@ -1055,7 +1055,7 @@
           coaches = [];
           attendanceData = {};
           btgData = {};
-          bmiRecords = {};
+          bmiRecords = [];
           checkupData = {};
           salesRecords = [];
           localStorage.removeItem('bwc_dismissed_notifications');
@@ -2009,7 +2009,6 @@
       if (successCount > 0) {
         this.reset();
         document.getElementById('salesDate').value = todayStr;
-        // Reset rows to default 1 row
         document.getElementById('dynamicProductRowsContainer').innerHTML = `
           <div class="product-row-item p-2 mb-2 bg-light border rounded position-relative">
             <div class="mb-1">
