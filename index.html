@@ -285,13 +285,18 @@
       </div>
     </div>
 
-    <!-- 90-DAY CHECKUP NOTIFICATION BANNER -->
+    <!-- 90-DAY CHECKUP NOTIFICATION BANNER WITH CLEAR CONTROLS -->
     <div class="card p-3 mb-3 bg-white border-0 shadow-sm no-print" id="checkupNotificationCard">
       <div class="d-flex justify-content-between align-items-center mb-2">
         <h6 class="fw-bold mb-0 text-dark">
           <i class="fa-solid fa-bell text-warning me-2"></i> Checkup Follow-up Reminders (90-Day Schedule)
         </h6>
-        <span class="badge bg-danger rounded-pill" id="totalDueCheckupsBadge">0 Due</span>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-danger rounded-pill" id="totalDueCheckupsBadge">0 Due</span>
+          <button class="btn btn-sm btn-outline-secondary py-0 px-2 fw-semibold" onclick="clearAllNotifications()" title="Dismiss All Reminders">
+            <i class="fa-solid fa-check-double me-1"></i> Clear All
+          </button>
+        </div>
       </div>
       <div id="checkupNotificationList" class="small">
         <span class="text-muted">Analyzing consumer schedules...</span>
@@ -441,7 +446,7 @@
       </div>
     </div>
 
-    <!-- 5. CHECKUP TRACKING (RENAMED FROM CHECKUP SUMMARY) -->
+    <!-- 5. CHECKUP TRACKING -->
     <div id="view-checkup" class="tab-view no-print">
       <div class="card p-3 p-md-4">
         <h5 class="text-success mb-3 fw-bold"><i class="fa-solid fa-file-medical me-2"></i> Checkup Tracking</h5>
@@ -467,7 +472,6 @@
     <!-- 6. PRODUCT TRACKING -->
     <div id="view-productSales" class="tab-view no-print">
       <div class="row">
-        <!-- Entry Form -->
         <div class="col-lg-4 mb-3">
           <div class="card p-3 border-start border-warning border-4">
             <h6 class="text-dark fw-bold border-bottom pb-2 mb-3"><i class="fa-solid fa-cart-plus me-1 text-warning"></i> Product Tracking Entry</h6>
@@ -490,13 +494,11 @@
                 <label class="form-label small fw-bold">Quantity *</label>
                 <input type="number" id="salesQty" class="form-control form-control-sm" min="1" value="1" required>
               </div>
-
               <button type="submit" class="btn btn-warning w-100 fw-bold shadow-sm"><i class="fa-solid fa-plus me-1"></i> Save Product Entry</button>
             </form>
           </div>
         </div>
 
-        <!-- Product Tracking Table -->
         <div class="col-lg-8">
           <div class="card p-3">
             <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
@@ -531,7 +533,7 @@
       </div>
     </div>
 
-    <!-- 7. REPORTS CENTER (COMBO HEALTH REPORT) -->
+    <!-- 7. REPORTS CENTER -->
     <div id="view-reports" class="tab-view no-print">
       <div class="card p-3 p-md-4 mx-auto shadow-sm" style="max-width:600px;">
         <h5 class="text-success text-center mb-3 fw-bold"><i class="fa-solid fa-sliders me-2"></i> Combo Health Report Generator</h5>
@@ -824,6 +826,8 @@
     let isMonthViewActive = false;
     let activeBtgModalConsumerId = null;
 
+    let dismissedCheckups = JSON.parse(localStorage.getItem('bwc_dismissed_notifications') || '[]');
+
     const today = new Date();
     const todayStr = today.toISOString().slice(0, 10);
     const currentMonthStr = today.toISOString().slice(0, 7);
@@ -1032,7 +1036,29 @@
       applyRoleView();
     }
 
-    // 90-DAY CHECKUP NOTIFICATION ENGINE
+    // 90-DAY CHECKUP NOTIFICATION ENGINE WITH CLEAR CONTROLS
+    function dismissSingleNotification(notificationKey) {
+      if (!dismissedCheckups.includes(notificationKey)) {
+        dismissedCheckups.push(notificationKey);
+        localStorage.setItem('bwc_dismissed_notifications', JSON.stringify(dismissedCheckups));
+      }
+      updateCheckupNotifications();
+    }
+
+    function clearAllNotifications() {
+      if (confirm('Kya aap sabhi current checkup notifications ko clear/dismiss karna chahte hain?')) {
+        const notifElements = document.querySelectorAll('[data-notif-key]');
+        notifElements.forEach(el => {
+          const key = el.getAttribute('data-notif-key');
+          if (key && !dismissedCheckups.includes(key)) {
+            dismissedCheckups.push(key);
+          }
+        });
+        localStorage.setItem('bwc_dismissed_notifications', JSON.stringify(dismissedCheckups));
+        updateCheckupNotifications();
+      }
+    }
+
     function updateCheckupNotifications() {
       const notifListEl = document.getElementById('checkupNotificationList');
       const badgeTotal = document.getElementById('totalDueCheckupsBadge');
@@ -1063,22 +1089,22 @@
         const diffTime = now - joinDate;
         const daysPassed = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-        // Sirf 90 Dino ke andar checkup alert aayega
         if (daysPassed >= 0 && daysPassed <= 90) {
           const userChkData = checkupData[c.id] || {};
 
           checkupIntervalMilestones.forEach(m => {
-            // Checkup Due condition: milestone tak day pass ho gaye ho aur date entry blank ho
             const isRecorded = userChkData[m.field] && userChkData[m.field].trim() !== "";
             const isDueOrPast = daysPassed >= m.offsetDays;
+            const notifKey = `${c.id}_${m.field}`;
 
-            if (isDueOrPast && !isRecorded) {
+            if (isDueOrPast && !isRecorded && !dismissedCheckups.includes(notifKey)) {
               const dueDateObj = new Date(joinDate);
               dueDateObj.setDate(dueDateObj.getDate() + m.offsetDays);
               const dueDateString = dueDateObj.toISOString().slice(0, 10);
               const isToday = daysPassed === m.offsetDays;
 
               dueReminders.push({
+                notifKey: notifKey,
                 consumerId: c.id,
                 consumerName: c.name,
                 consumerPhone: c.phone,
@@ -1092,9 +1118,8 @@
         }
       });
 
-      // Update UI
       const dueCount = dueReminders.length;
-      badgeTotal.innerText = `${dueCount} Follow-ups`;
+      badgeTotal.innerText = `${dueCount} Due`;
       if (dueCount > 0) {
         sidebarBadge.innerText = dueCount;
         sidebarBadge.classList.remove('d-none');
@@ -1106,12 +1131,17 @@
       }
 
       if (dueCount === 0) {
-        notifListEl.innerHTML = `<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i> Sabhi 90-Day checkup follow-ups up-to-date hain!</span>`;
+        notifListEl.innerHTML = `
+          <div class="d-flex justify-content-between align-items-center">
+            <span class="text-success"><i class="fa-solid fa-circle-check me-1"></i> Sabhi follow-ups cleared aur up-to-date hain!</span>
+            ${dismissedCheckups.length > 0 ? `<button class="btn btn-sm btn-link text-muted p-0" onclick="localStorage.removeItem('bwc_dismissed_notifications'); dismissedCheckups=[]; updateCheckupNotifications();" style="font-size:0.75rem;">Reset Dismissed</button>` : ''}
+          </div>
+        `;
       } else {
         let itemsHTML = '';
         dueReminders.slice(0, 8).forEach(r => {
           itemsHTML += `
-            <div class="notif-card ${r.isToday ? 'due-today' : 'upcoming'} d-flex justify-content-between align-items-center">
+            <div class="notif-card ${r.isToday ? 'due-today' : 'upcoming'} d-flex justify-content-between align-items-center" data-notif-key="${r.notifKey}">
               <div>
                 <strong class="text-dark">${r.consumerName}</strong> 
                 <span class="badge ${r.isToday ? 'bg-danger' : 'bg-warning text-dark'} ms-1">${r.title}</span>
@@ -1119,9 +1149,10 @@
                   <i class="fa-regular fa-calendar me-1"></i> Due Date: <strong>${r.dueDate}</strong> (${r.daysPassed} days since join)
                 </div>
               </div>
-              <div class="d-flex gap-1">
+              <div class="d-flex gap-1 align-items-center">
                 <a href="https://wa.me/91${(r.consumerPhone||'').replace(/\D/g,'')}?text=Namaste%20${encodeURIComponent(r.consumerName)},%20Aapka%20${encodeURIComponent(r.title)}%20Bharat%20Wellness%20Club%20par%20due%20hai." target="_blank" class="btn btn-sm btn-success py-0 px-2" title="WhatsApp Reminder"><i class="fa-brands fa-whatsapp"></i></a>
                 <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="openSection('checkup')" title="Update Checkup"><i class="fa-solid fa-pen-to-square"></i></button>
+                <button class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="dismissSingleNotification('${r.notifKey}')" title="Dismiss Reminder"><i class="fa-solid fa-xmark"></i></button>
               </div>
             </div>
           `;
@@ -1699,7 +1730,7 @@
       });
     }
 
-    // 5. CHECKUP TRACKING (CALENDAR CONTROLS + AUTO JOIN AS START)
+    // 5. CHECKUP TRACKING
     function renderCheckup() {
       const tbody = document.getElementById('checkupTableBody');
       const mobileContainer = document.getElementById('checkupMobileCards');
@@ -1711,7 +1742,6 @@
         const data = checkupData[c.id] || {};
         const startDate = c.joiningDate || data.start || '-';
         
-        // Mobile Cards
         mobileContainer.innerHTML += `
           <div class="app-consumer-card">
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1741,7 +1771,6 @@
           </div>
         `;
 
-        // Desktop Table View
         tbody.innerHTML += `
           <tr>
             <td>${index + 1}</td>
