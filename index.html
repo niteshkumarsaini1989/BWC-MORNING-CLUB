@@ -205,7 +205,7 @@
         </div>
         <div class="mb-4 text-start">
           <label class="form-label small fw-bold text-dark">Security PIN / Password</label>
-          <input type="password" id="loginPasswordInput" class="form-control" required placeholder="Default: 1234">
+          <input type="password" id="loginPasswordInput" class="form-control" required placeholder="Enter Security Password">
         </div>
         <button type="submit" class="btn btn-success w-100 py-2 fw-bold shadow-sm">
           <i class="fa-solid fa-right-to-bracket me-2"></i> Login to Portal
@@ -436,7 +436,7 @@
             <div class="desktop-table-view table-responsive">
               <table class="table table-bordered table-sm text-center align-middle table-hover">
                 <thead class="table-light">
-                  <tr><th>Date</th><th class="text-start">Name</th><th>Weight</th><th>BMI</th><th>VFA</th><th>Fat %</th><th>Age</th><th>R.M.</th><th>S.M. %</th><th>Waist</th><th>Slip</th><th>Del</th></tr>
+                  <tr><th>Date</th><th>Weight</th><th>BMI</th><th>VFA</th><th>Fat %</th><th>Age</th><th>R.M.</th><th>S.M. %</th><th>Waist</th><th>Slip</th><th>Del</th></tr>
                 </thead>
                 <tbody id="bmiTableBody"></tbody>
               </table>
@@ -819,7 +819,7 @@
     let checkupData = {};
     let bmiRecords = [];
     let salesRecords = [];
-    let adminPass = "1234";
+    let adminPass = null; // null means no custom password set yet
 
     let currentUser = JSON.parse(sessionStorage.getItem('bwc_session_user')) || null;
     let selectedCoachFilter = 'ALL';
@@ -844,8 +844,7 @@
 
     function initCloudListeners() {
       db.ref('settings/adminPass').on('value', snap => { 
-        if (snap.val()) adminPass = snap.val(); 
-        else adminPass = "1234";
+        adminPass = snap.val() || null;
       });
       db.ref('coaches').on('value', snap => { coaches = snap.val() ? Object.values(snap.val()) : []; updateCoachDropdowns(); renderCoaches(); });
       db.ref('consumers').on('value', snap => { consumers = snap.val() ? Object.values(snap.val()) : []; refreshUI(); });
@@ -937,8 +936,10 @@
       const inputPass = document.getElementById('loginPasswordInput').value.trim();
 
       if (role === 'ADMIN') {
-        // ALWAYS ALLOW 1234 OR THE CLOUD SAVED PASSWORD
-        if (inputPass === adminPass || inputPass === "1234") {
+        // DYNAMIC AUTH: agar cloud me password save hai toh sirf wahi chalega, agar blank hai toh 1234
+        const expectedPass = adminPass ? adminPass : "1234";
+
+        if (inputPass === expectedPass) {
           currentUser = { id: 'ADMIN', name: 'Master Admin', role: 'ADMIN' };
           sessionStorage.setItem('bwc_session_user', JSON.stringify(currentUser));
           document.getElementById('authOverlay').style.display = 'none';
@@ -947,7 +948,7 @@
           checkDeviceView();
           this.reset();
         } else {
-          alert('Incorrect Password! Master Admin ke liye "1234" dalein.');
+          alert('Galat Password! Kripya sahi PIN/Password dalein.');
         }
       } else {
         const inputUsername = document.getElementById('loginCoachUsername').value.trim();
@@ -978,17 +979,22 @@
     function updateAdminPassword() {
       const newP = document.getElementById('newAdminPasswordInput').value.trim();
       if (!newP) return alert('Naya password likhein!');
-      adminPass = newP;
-      db.ref('settings/adminPass').set(newP);
-      alert('Admin Password updated to: ' + newP);
-      document.getElementById('newAdminPasswordInput').value = '';
+      db.ref('settings/adminPass').set(newP).then(() => {
+        adminPass = newP;
+        alert('Master Admin Password badal diya gaya hai! Ab sirf naya password hi chalega.');
+        document.getElementById('newAdminPasswordInput').value = '';
+      }).catch(err => {
+        alert('Password update failed: ' + err.message);
+      });
     }
 
     function executeMasterReset() {
       const confirmAuth = prompt("⚠️ DANGER: Kya aap Cloud ka SAARA DATA reset karna chahte hain?\nConfirm karne ke liye apna Master Admin Password likhein:");
       if (!confirmAuth) return;
 
-      if (confirmAuth.trim() === adminPass || confirmAuth.trim() === "1234") {
+      const expectedPass = adminPass ? adminPass : "1234";
+
+      if (confirmAuth.trim() === expectedPass) {
         db.ref('consumers').remove();
         db.ref('coaches').remove();
         db.ref('attendance').remove();
