@@ -1283,18 +1283,29 @@
       }
     }
 
-    // 1. CONSUMER CRUD (HEIGHT OPTIONAL)
+    // 1. CONSUMER CRUD (HEIGHT OPTIONAL + PROPER COACH ASSIGNMENT DROPDOWN)
     function openAddConsumerModal() {
       document.getElementById('consumerForm').reset();
       document.getElementById('mEditId').value = '';
       document.getElementById('mJoinDate').value = todayStr;
       document.getElementById('mIdealWt').value = '';
+      populateModalCoachDropdown();
       new bootstrap.Modal(document.getElementById('addConsumerModal')).show();
+    }
+
+    function populateModalCoachDropdown() {
+      const coachSelect = document.getElementById('mAssignCoach');
+      if (!coachSelect) return;
+      coachSelect.innerHTML = '<option value="ADMIN">Master Admin (Direct)</option>';
+      coaches.forEach(co => {
+        coachSelect.innerHTML += `<option value="${co.id}">${co.name} (${co.code})</option>`;
+      });
     }
 
     function editConsumer(id) {
       const c = consumers.find(item => item.id === id);
       if (!c) return;
+      populateModalCoachDropdown();
       document.getElementById('mEditId').value = c.id;
       document.getElementById('mName').value = c.name;
       document.getElementById('mCode').value = c.code;
@@ -1311,7 +1322,16 @@
     document.getElementById('consumerForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const editId = document.getElementById('mEditId').value;
-      const assignedCoachId = currentUser.role === 'ADMIN' ? (document.getElementById('mAssignCoach').value || 'ADMIN') : currentUser.id;
+      
+      // FIX: Ensure correct coach assignment whether added by Admin or Coach
+      let assignedCoachId = 'ADMIN';
+      if (currentUser && currentUser.role === 'ADMIN') {
+        const coachDropdownVal = document.getElementById('mAssignCoach').value;
+        assignedCoachId = coachDropdownVal ? coachDropdownVal : 'ADMIN';
+      } else if (currentUser && currentUser.role === 'COACH') {
+        assignedCoachId = currentUser.id;
+      }
+
       const consumerId = editId ? parseInt(editId) : Date.now();
       const consumerData = {
         id: consumerId,
@@ -1344,7 +1364,7 @@
       }
 
       list.forEach((c, index) => {
-        const coachObj = coaches.find(co => co.id === c.coachId) || { name: 'Admin' };
+        const coachObj = coaches.find(co => co.id === c.coachId) || { name: 'Master Admin' };
         
         mobileContainer.innerHTML += `
           <div class="app-consumer-card">
@@ -1353,6 +1373,7 @@
                 <h6 class="fw-bold mb-0 text-success" onclick="generateSingleProfileReport(${c.id})">${c.name}</h6>
                 <span class="badge bg-secondary" style="font-size:0.7rem;">${c.code}</span>
                 <span class="badge ${c.gender === 'Female' ? 'bg-danger' : 'bg-primary'}" style="font-size:0.7rem;">${c.gender || 'Male'}</span>
+                <span class="badge bg-dark" style="font-size:0.65rem;">Coach: ${coachObj.name}</span>
               </div>
               <div>
                 <button class="btn btn-sm btn-outline-primary py-1 px-2" onclick="editConsumer(${c.id})"><i class="fa-solid fa-pen"></i></button>
@@ -2085,12 +2106,12 @@
     function updateCoachDropdowns() {
       const coachSelect = document.getElementById('mAssignCoach');
       const adminFilter = document.getElementById('adminCoachFilter');
-      coachSelect.innerHTML = '<option value="ADMIN">Master Admin</option>';
-      adminFilter.innerHTML = '<option value="ALL">🌟 All Coaches (Full Team)</option>';
+      if (coachSelect) coachSelect.innerHTML = '<option value="ADMIN">Master Admin (Direct)</option>';
+      if (adminFilter) adminFilter.innerHTML = '<option value="ALL">🌟 All Coaches (Full Team)</option>';
 
       coaches.forEach(co => {
-        coachSelect.innerHTML += `<option value="${co.id}">${co.name} (${co.code})</option>`;
-        adminFilter.innerHTML += `<option value="${co.id}">Coach: ${co.name}</option>`;
+        if (coachSelect) coachSelect.innerHTML += `<option value="${co.id}">${co.name} (${co.code})</option>`;
+        if (adminFilter) adminFilter.innerHTML += `<option value="${co.id}">Coach: ${co.name}</option>`;
       });
     }
 
@@ -2116,6 +2137,7 @@
 
     function renderCoaches() {
       const tbody = document.getElementById('coachTableBody');
+      if (!tbody) return;
       tbody.innerHTML = '';
       coaches.forEach((co, index) => {
         const count = consumers.filter(c => c.coachId === co.id).length;
