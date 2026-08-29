@@ -51,6 +51,21 @@
       }
       quickLogin('COACH', coachId, coachName);
     }
+
+    function openAddConsumerModal() {
+      if (typeof window._openAddConsumerModalImpl === 'function') {
+        window._openAddConsumerModalImpl();
+      } else {
+        const modalEl = document.getElementById('addConsumerModal');
+        if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+          bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+      }
+    }
+
+    window.quickLogin = quickLogin;
+    window.quickLoginCoach = quickLoginCoach;
+    window.openAddConsumerModal = openAddConsumerModal;
   </script>
 
   <style>
@@ -839,8 +854,17 @@
       appId: "1:548591699422:web:b0ec29747297b5fc4ec94f"
     };
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    var db = null;
+    try {
+      if (typeof firebase !== 'undefined' && firebase.initializeApp) {
+        if (!firebase.apps.length) {
+          firebase.initializeApp(firebaseConfig);
+        }
+        db = firebase.database();
+      }
+    } catch (fbInitErr) {
+      console.warn('Firebase initialization notice:', fbInitErr);
+    }
 
     // MASTER PRODUCTS DATABASE WITH ADVANCED SEARCH KEYS
     const masterProductsDB = [
@@ -900,66 +924,100 @@
     var isMonthViewActive = false;
     var activeBtgModalConsumerId = null;
 
-    var dismissedCheckups = JSON.parse(localStorage.getItem('bwc_dismissed_notifications') || '[]');
+    var dismissedCheckups = [];
+    try {
+      dismissedCheckups = JSON.parse(localStorage.getItem('bwc_dismissed_notifications') || '[]');
+    } catch (e) {
+      dismissedCheckups = [];
+    }
 
     const today = new Date();
     const todayStr = today.toISOString().slice(0, 10);
     const currentMonthStr = today.toISOString().slice(0, 7);
-    document.getElementById('dailyAttDate').value = todayStr;
-    document.getElementById('monthlyAttPicker').value = currentMonthStr;
-    document.getElementById('btgDate').value = todayStr;
-    document.getElementById('btgModalDateInput').value = todayStr;
-    document.getElementById('btgModalMonthInput').value = currentMonthStr;
-    document.getElementById('mJoinDate').value = todayStr;
-    document.getElementById('bmiDate').value = todayStr;
-    document.getElementById('salesDate').value = todayStr;
+
+    function initFormDefaults() {
+      const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+      };
+      setVal('dailyAttDate', todayStr);
+      setVal('monthlyAttPicker', currentMonthStr);
+      setVal('btgDate', todayStr);
+      setVal('btgModalDateInput', todayStr);
+      setVal('btgModalMonthInput', currentMonthStr);
+      setVal('mJoinDate', todayStr);
+      setVal('bmiDate', todayStr);
+      setVal('salesDate', todayStr);
+    }
+    initFormDefaults();
 
     initCloudListeners();
 
     function initCloudListeners() {
-      db.ref('settings/adminPass').on('value', snap => { 
-        adminPass = snap.val() || null;
-      });
-      db.ref('coaches').on('value', snap => { 
-        coaches = snap.val() ? Object.values(snap.val()) : []; 
-        updateCoachDropdowns(); 
-        renderCoaches(); 
-      });
-      db.ref('consumers').on('value', snap => { 
-        consumers = snap.val() ? Object.values(snap.val()) : []; 
-        refreshUI(); 
-      });
-      db.ref('attendance').on('value', snap => { 
-        attendanceData = snap.val() || {}; 
-        renderAttendance(); 
-      });
-      db.ref('btg').on('value', snap => { 
-        btgData = snap.val() || {}; 
-        renderBTG(); 
-        if (activeBtgModalConsumerId) renderBtgModalContent();
-      });
-      db.ref('bmiRecords').on('value', snap => { 
-        bmiRecords = snap.val() ? Object.values(snap.val()) : []; 
-        renderBMIHistory(); 
-      });
-      db.ref('checkups').on('value', snap => { 
-        checkupData = snap.val() || {}; 
-        renderCheckup(); 
-        updateCheckupNotifications(); 
-      });
-      db.ref('salesRecords').on('value', snap => {
-        salesRecords = snap.val() ? Object.values(snap.val()) : [];
-        renderSalesHistory();
-      });
+      if (!db) {
+        console.warn('Database offline or initializing. UI will function with local state.');
+        populateMasterProductsDatalist();
+        if (currentUser) {
+          const auth = document.getElementById('authOverlay');
+          if (auth) auth.style.display = 'none';
+          applyRoleView();
+          checkDeviceView();
+        } else {
+          const auth = document.getElementById('authOverlay');
+          if (auth) auth.style.display = 'flex';
+        }
+        return;
+      }
+
+      try {
+        db.ref('settings/adminPass').on('value', snap => { 
+          adminPass = snap.val() || null;
+        });
+        db.ref('coaches').on('value', snap => { 
+          coaches = snap.val() ? Object.values(snap.val()) : []; 
+          updateCoachDropdowns(); 
+          renderCoaches(); 
+        });
+        db.ref('consumers').on('value', snap => { 
+          consumers = snap.val() ? Object.values(snap.val()) : []; 
+          refreshUI(); 
+        });
+        db.ref('attendance').on('value', snap => { 
+          attendanceData = snap.val() || {}; 
+          renderAttendance(); 
+        });
+        db.ref('btg').on('value', snap => { 
+          btgData = snap.val() || {}; 
+          renderBTG(); 
+          if (activeBtgModalConsumerId) renderBtgModalContent();
+        });
+        db.ref('bmiRecords').on('value', snap => { 
+          bmiRecords = snap.val() ? Object.values(snap.val()) : []; 
+          renderBMIHistory(); 
+        });
+        db.ref('checkups').on('value', snap => { 
+          checkupData = snap.val() || {}; 
+          renderCheckup(); 
+          updateCheckupNotifications(); 
+        });
+        db.ref('salesRecords').on('value', snap => {
+          salesRecords = snap.val() ? Object.values(snap.val()) : [];
+          renderSalesHistory();
+        });
+      } catch (err) {
+        console.error('Cloud listener setup error:', err);
+      }
 
       populateMasterProductsDatalist();
 
       if (currentUser) {
-        document.getElementById('authOverlay').style.display = 'none';
+        const auth = document.getElementById('authOverlay');
+        if (auth) auth.style.display = 'none';
         applyRoleView();
         checkDeviceView();
       } else {
-        document.getElementById('authOverlay').style.display = 'flex';
+        const auth = document.getElementById('authOverlay');
+        if (auth) auth.style.display = 'flex';
       }
     }
 
@@ -1322,39 +1380,65 @@
 
     // 1. CONSUMER CRUD (HEIGHT OPTIONAL + PROPER COACH ASSIGNMENT DROPDOWN)
     function openAddConsumerModal() {
-      document.getElementById('consumerForm').reset();
-      document.getElementById('mEditId').value = '';
-      document.getElementById('mJoinDate').value = todayStr;
-      document.getElementById('mIdealWt').value = '';
-      populateModalCoachDropdown();
-      new bootstrap.Modal(document.getElementById('addConsumerModal')).show();
+      try {
+        const form = document.getElementById('consumerForm');
+        if (form) form.reset();
+        const editId = document.getElementById('mEditId');
+        if (editId) editId.value = '';
+        const joinDate = document.getElementById('mJoinDate');
+        if (joinDate) joinDate.value = (typeof todayStr !== 'undefined' && todayStr) ? todayStr : new Date().toISOString().slice(0, 10);
+        const idealWt = document.getElementById('mIdealWt');
+        if (idealWt) idealWt.value = '';
+        populateModalCoachDropdown();
+        const modalEl = document.getElementById('addConsumerModal');
+        if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+          bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+      } catch (err) {
+        console.error('openAddConsumerModal error:', err);
+      }
     }
 
     function populateModalCoachDropdown() {
       const coachSelect = document.getElementById('mAssignCoach');
       if (!coachSelect) return;
       coachSelect.innerHTML = '<option value="ADMIN">Master Admin (Direct)</option>';
-      coaches.forEach(co => {
-        coachSelect.innerHTML += `<option value="${co.id}">${co.name} (${co.code})</option>`;
-      });
+      if (Array.isArray(coaches)) {
+        coaches.forEach(co => {
+          coachSelect.innerHTML += `<option value="${co.id}">${co.name} (${co.code || ''})</option>`;
+        });
+      }
     }
 
     function editConsumer(id) {
-      const c = consumers.find(item => item.id === id);
-      if (!c) return;
-      populateModalCoachDropdown();
-      document.getElementById('mEditId').value = c.id;
-      document.getElementById('mName').value = c.name;
-      document.getElementById('mCode').value = c.code;
-      document.getElementById('mJoinDate').value = c.joiningDate;
-      document.getElementById('mGender').value = c.gender || 'Male';
-      document.getElementById('mPhone').value = c.phone === '-' ? '' : c.phone;
-      document.getElementById('mAge').value = c.age === '-' ? '' : c.age;
-      document.getElementById('mHeight').value = c.height === '-' ? '' : c.height;
-      document.getElementById('mIdealWt').value = c.idealWeight === '-' ? '' : c.idealWeight;
-      document.getElementById('mAssignCoach').value = c.coachId || 'ADMIN';
-      new bootstrap.Modal(document.getElementById('addConsumerModal')).show();
+      try {
+        const c = consumers.find(item => item.id === id);
+        if (!c) return;
+        populateModalCoachDropdown();
+        const setVal = (fid, val) => { const el = document.getElementById(fid); if (el) el.value = val; };
+        setVal('mEditId', c.id);
+        setVal('mName', c.name || '');
+        setVal('mCode', c.code || '');
+        setVal('mJoinDate', c.joiningDate || todayStr);
+        setVal('mGender', c.gender || 'Male');
+        setVal('mPhone', c.phone === '-' ? '' : (c.phone || ''));
+        setVal('mAge', c.age === '-' ? '' : (c.age || ''));
+        setVal('mHeight', c.height === '-' ? '' : (c.height || ''));
+        setVal('mIdealWt', c.idealWeight === '-' ? '' : (c.idealWeight || ''));
+        setVal('mAssignCoach', c.coachId || 'ADMIN');
+        const modalEl = document.getElementById('addConsumerModal');
+        if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+          bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+      } catch (err) {
+        console.error('editConsumer error:', err);
+      }
     }
+
+    window.openAddConsumerModal = openAddConsumerModal;
+    window._openAddConsumerModalImpl = openAddConsumerModal;
+    window.editConsumer = editConsumer;
+    window.populateModalCoachDropdown = populateModalCoachDropdown;
 
     document.getElementById('consumerForm').addEventListener('submit', function(e) {
       e.preventDefault();
