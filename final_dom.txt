@@ -1,0 +1,2583 @@
+<!DOCTYPE html>
+<html lang="hi"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Bharat Wellness Club - Secure Multi-Coach Cloud ERP</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <script>
+    var currentUser = JSON.parse(sessionStorage.getItem('bwc_session_user')) || null;
+    var coaches = [];
+
+    function quickLogin(role, coachId, coachName) {
+      try {
+        if (role === 'ADMIN') {
+          currentUser = { id: 'ADMIN', name: 'Master Admin', role: 'ADMIN' };
+        } else {
+          let matchedCoach = coaches.find(co => co.id === coachId || co.phone === coachId || (co.code && co.code.toLowerCase() === (coachId || '').toLowerCase()));
+          if (!matchedCoach && coachId && coachId !== 'COACH_DEMO') {
+            matchedCoach = coaches.find(co => co.id === coachId);
+          }
+          if (!matchedCoach) {
+            matchedCoach = coaches.length > 0 && coachId !== 'COACH_DEMO' ? coaches[0] : { id: 'COACH_DEMO', name: coachName || 'Demo Coach', role: 'COACH' };
+          }
+          currentUser = { id: matchedCoach.id, name: matchedCoach.name, role: 'COACH' };
+        }
+        sessionStorage.setItem('bwc_session_user', JSON.stringify(currentUser));
+        const authEl = document.getElementById('authOverlay');
+        if (authEl) authEl.style.display = 'none';
+        if (typeof applyRoleView === 'function') applyRoleView();
+        if (typeof refreshUI === 'function') refreshUI();
+        if (typeof checkDeviceView === 'function') checkDeviceView();
+      } catch (err) {
+        console.error('quickLogin error:', err);
+        const authEl = document.getElementById('authOverlay');
+        if (authEl) authEl.style.display = 'none';
+      }
+    }
+
+    function quickLoginCoach() {
+      const select = document.getElementById('loginCoachSelect');
+      const coachId = select ? select.value : 'COACH_DEMO';
+      let coachName = 'Demo Coach';
+      if (select && select.selectedIndex >= 0) {
+        coachName = select.options[select.selectedIndex].text.replace(/^[^\w\u0900-\u097F]+/, '').trim();
+      }
+      quickLogin('COACH', coachId, coachName);
+    }
+  </script>
+
+  <style>
+    :root {
+      --primary-color: #1b5e20;
+      --secondary-color: #2e7d32;
+      --sidebar-bg: #1e293b;
+      --sidebar-hover: #334155;
+    }
+    body {
+      background-color: #f1f5f9;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow-x: hidden;
+    }
+
+    #authOverlay {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      z-index: 99999;
+      display: flex; justify-content: center; align-items: center; padding: 15px;
+    }
+    .auth-card {
+      background: #ffffff;
+      border-radius: 16px; width: 100%; max-width: 400px;
+      padding: 35px 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    }
+
+    .sidebar {
+      width: 260px; height: 100vh; position: fixed; left: 0; top: 0;
+      background-color: var(--sidebar-bg); color: #fff;
+      display: flex; flex-direction: column; z-index: 1000;
+      box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    }
+    .sidebar-brand {
+      padding: 16px 20px; font-size: 1.15rem; font-weight: bold;
+      color: #4ade80; border-bottom: 1px solid #334155; text-align: center;
+    }
+    .user-pill {
+      background: #0f172a; padding: 10px 15px; border-bottom: 1px solid #334155; font-size: 0.85rem;
+    }
+    .sidebar-menu {
+      list-style: none; padding: 10px 0; margin: 0; flex-grow: 1; overflow-y: auto;
+    }
+    .sidebar-menu li a {
+      display: flex; align-items: center; padding: 11px 20px;
+      color: #cbd5e1; text-decoration: none; font-size: 0.90rem; transition: all 0.2s;
+    }
+    .sidebar-menu li a i { width: 25px; margin-right: 8px; font-size: 1rem; }
+    .sidebar-menu li a:hover, .sidebar-menu li a.active {
+      background-color: var(--sidebar-hover); color: #4ade80; border-left: 4px solid #4ade80;
+    }
+    .sidebar-section-title {
+      font-size: 0.70rem; text-transform: uppercase; letter-spacing: 1px;
+      color: #64748b; padding: 12px 20px 4px; font-weight: bold;
+    }
+    .main-content {
+      margin-left: 260px; padding: 20px; min-height: 100vh;
+    }
+
+    .mobile-header-bar {
+      display: none; background: #ffffff; padding: 12px 16px; border-radius: 12px;
+      margin-bottom: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      align-items: center; justify-content: space-between;
+    }
+    .menu-hub-card {
+      background: #ffffff; border-radius: 14px; padding: 16px 10px;
+      text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      border: 1px solid #e2e8f0; cursor: pointer; transition: transform 0.15s ease;
+    }
+    .menu-hub-card:active { transform: scale(0.96); }
+    .menu-hub-card i { font-size: 1.8rem; margin-bottom: 6px; }
+    .menu-hub-card h6 { font-size: 0.85rem; font-weight: 700; margin-bottom: 0; color: #1e293b; }
+
+    .app-consumer-card {
+      background: #ffffff; border-radius: 12px; padding: 14px;
+      margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+      border: 1px solid #e2e8f0; position: relative;
+    }
+    .app-consumer-card.present-border { border-left: 5px solid #10b981; }
+    .app-consumer-card.absent-border { border-left: 5px solid #ef4444; }
+    
+    .btg-chip-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px;
+    }
+    .btg-chip {
+      background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px;
+      padding: 6px 2px; text-align: center; font-size: 0.72rem; font-weight: 700;
+      color: #475569; cursor: pointer; user-select: none;
+    }
+    .btg-chip.active { background: #dcfce7; border-color: #22c55e; color: #15803d; }
+    .clickable-link { color: #15803d; text-decoration: underline; cursor: pointer; }
+
+    .tab-view { display: none !important; }
+    .tab-view.active-tab { display: block !important; }
+
+    /* Checkup Notification Styles */
+    .notif-bell-badge {
+      background: #ef4444; color: #fff; border-radius: 50rem; padding: 0.25em 0.6em; font-size: 0.75rem;
+    }
+    .notif-card {
+      background: #fff; border-radius: 10px; border-left: 4px solid #f59e0b; padding: 10px 14px; margin-bottom: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    }
+    .notif-card.due-today { border-left-color: #ef4444; background: #fff5f5; }
+    .notif-card.upcoming { border-left-color: #3b82f6; }
+
+    @media (max-width: 992px) {
+      .sidebar { display: none !important; }
+      .main-content { margin-left: 0 !important; padding: 10px !important; }
+      .mobile-header-bar { display: flex !important; }
+      .desktop-table-view { display: none !important; }
+      .mobile-cards-view { display: block !important; }
+    }
+    @media (min-width: 993px) {
+      .mobile-cards-view { display: none !important; }
+      .desktop-table-view { display: block !important; }
+    }
+    .card { border-radius: 12px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
+
+    /* STRICT EXACT A4 PRINT STYLING */
+    @page {
+      size: A4 portrait;
+      margin: 8mm 10mm 8mm 10mm;
+    }
+    @media print {
+      html, body {
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+      }
+      body * {
+        visibility: hidden !important;
+      }
+      #previewModalArea, #previewModalArea * {
+        visibility: visible !important;
+      }
+      #reportViewerModal {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        display: block !important;
+        background: #ffffff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .modal-dialog {
+        max-width: 100% !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .modal-content {
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+      }
+      .no-print, .modal-header, .modal-footer, .btn, .btn-close {
+        display: none !important;
+      }
+      .table {
+        border-color: #333333 !important;
+      }
+      .table th, .table td {
+        padding: 2px 4px !important;
+        font-size: 0.72rem !important;
+        line-height: 1.15 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- AUTH SCREEN (TESTING / PASSWORD-FREE LOGIN) -->
+  <div id="authOverlay" class="no-print" style="display: flex;">
+    <div class="auth-card text-center">
+      <div class="mb-3 text-success"><i class="fa-solid fa-heart-pulse fa-3x"></i></div>
+      <h4 class="fw-bold text-dark mb-1">BHARAT WELLNESS CLUB</h4>
+      <p class="text-muted small mb-3">Multi-Coach Cloud Portal</p>
+      
+      <div class="alert alert-success py-2 px-3 small fw-bold mb-3 border-0 shadow-sm d-flex align-items-center justify-content-center gap-2">
+        <i class="fa-solid fa-circle-check text-success"></i>
+        <span>Testing Mode: Password Free Login Active</span>
+      </div>
+
+      <div class="d-grid gap-2 mb-3">
+        <button type="button" class="btn btn-success py-2 fw-bold shadow-sm" onclick="quickLogin('ADMIN')">
+          <i class="fa-solid fa-crown me-2"></i> Direct Login as Master Admin
+        </button>
+      </div>
+
+      <div class="card p-3 bg-light border-0 rounded-3 text-start mb-2 shadow-sm">
+        <label class="form-label small fw-bold text-dark mb-1">
+          <i class="fa-solid fa-user-tie text-success me-1"></i> Or Login as Coach:
+        </label>
+        <div class="input-group">
+          <select id="loginCoachSelect" class="form-select form-select-sm fw-semibold">
+            <option value="COACH_DEMO">👤 Demo Coach</option>
+          </select>
+          <button type="button" class="btn btn-primary btn-sm fw-bold px-3" onclick="quickLoginCoach()">
+            <i class="fa-solid fa-arrow-right-to-bracket me-1"></i> Login
+          </button>
+        </div>
+      </div>
+
+      <div class="text-muted mt-2" style="font-size: 0.75rem;">
+        <i class="fa-solid fa-bolt text-warning me-1"></i> 1-Click Fast Login Active for Testing
+      </div>
+    </div>
+  </div>
+
+  <!-- DESKTOP SIDEBAR -->
+  <div class="sidebar no-print">
+    <div class="sidebar-brand"><i class="fa-solid fa-heart-pulse me-2"></i> BHARAT WELLNESS</div>
+    <div class="user-pill d-flex justify-content-between align-items-center">
+      <div>
+        <div class="fw-bold text-light" id="activeUserNameDisplay">Master Admin</div>
+        <small class="text-success" id="activeUserRoleDisplay"><i class="fa-solid fa-crown me-1"></i> Admin</small>
+      </div>
+      <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="logoutUser()" title="Logout"><i class="fa-solid fa-power-off"></i></button>
+    </div>
+    <ul class="sidebar-menu">
+      <li class="sidebar-section-title">Club Operations</li>
+      <li><a href="javascript:void(0)" class="nav-btn active" id="btn-nav-consumers" onclick="openSection('consumers', this)"><i class="fa-solid fa-users"></i> Consumer Master</a></li>
+      <li><a href="javascript:void(0)" class="nav-btn" id="btn-nav-attendance" onclick="openSection('attendance', this)"><i class="fa-solid fa-calendar-check"></i> Daily Attendance</a></li>
+      <li><a href="javascript:void(0)" class="nav-btn" id="btn-nav-btg" onclick="openSection('btg', this)"><i class="fa-solid fa-utensils"></i> Food (BTG) Diet</a></li>
+      <li><a href="javascript:void(0)" class="nav-btn" id="btn-nav-bmi" onclick="openSection('bmi', this)"><i class="fa-solid fa-weight-scale"></i> BMI &amp; Wellness</a></li>
+      <li>
+        <a href="javascript:void(0)" class="nav-btn d-flex justify-content-between align-items-center" id="btn-nav-checkup" onclick="openSection('checkup', this)">
+          <span><i class="fa-solid fa-stethoscope"></i> Checkup Tracking</span>
+          <span class="badge bg-danger rounded-pill d-none" id="sidebarCheckupBadge">0</span>
+        </a>
+      </li>
+      
+      <li class="sidebar-section-title">Inventory &amp; Records</li>
+      <li><a href="javascript:void(0)" class="nav-btn text-warning" id="btn-nav-productSales" onclick="openSection('productSales', this)"><i class="fa-solid fa-boxes-stacked"></i> Product Tracking</a></li>
+      <li><a href="javascript:void(0)" class="nav-btn" id="btn-nav-reports" onclick="openSection('reports', this)"><i class="fa-solid fa-file-invoice"></i> Reports Center</a></li>
+
+      <li class="sidebar-section-title admin-only">Team Management</li>
+      <li class="admin-only"><a href="javascript:void(0)" class="nav-btn" id="btn-nav-coaches" onclick="openSection('coaches', this)"><i class="fa-solid fa-user-tie"></i> Manage Coaches</a></li>
+
+      <li class="sidebar-section-title">System &amp; Cloud</li>
+      <li><a href="javascript:void(0)" class="nav-btn" id="btn-nav-dataManager" onclick="openSection('dataManager', this)"><i class="fa-solid fa-cloud-arrow-up"></i> Cloud Sync &amp; Backup</a></li>
+      <li class="admin-only"><a href="javascript:void(0)" class="nav-btn text-danger" id="btn-nav-advanceSettings" onclick="openSection('advanceSettings', this)"><i class="fa-solid fa-triangle-exclamation"></i> Advance Settings</a></li>
+    </ul>
+  </div>
+
+  <!-- MAIN VIEWPORT -->
+  <div class="main-content">
+    <div class="mobile-header-bar no-print">
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-outline-dark btn-sm fw-bold px-3 d-none" id="mobileBackBtn" onclick="showMobileHub()"><i class="fa-solid fa-arrow-left me-1"></i> Back</button>
+        <h6 class="fw-bold mb-0 text-success" id="mobileHeaderTitle"><i class="fa-solid fa-heart-pulse me-1"></i> Bharat Wellness</h6>
+      </div>
+      <button class="btn btn-outline-danger btn-sm px-2 py-1" onclick="logoutUser()" title="Logout"><i class="fa-solid fa-power-off"></i></button>
+    </div>
+
+    <!-- MOBILE DASHBOARD HUB -->
+    <div id="mobileDashboardHub" class="d-none no-print">
+      <div class="card p-3 mb-3 bg-success text-white">
+        <h5 class="mb-0 fw-bold" id="mobileUserWelcome">Welcome, Coach</h5>
+        <small class="opacity-75" id="mobileRoleWelcome">Online Cloud Portal</small>
+      </div>
+      <div class="row g-2">
+        <div class="col-6"><div class="menu-hub-card" onclick="openSection('consumers')"><i class="fa-solid fa-users text-primary"></i><h6>Consumers</h6></div></div>
+        <div class="col-6"><div class="menu-hub-card" onclick="openSection('attendance')"><i class="fa-solid fa-calendar-check text-success"></i><h6>Attendance</h6></div></div>
+        <div class="col-6"><div class="menu-hub-card" onclick="openSection('btg')"><i class="fa-solid fa-utensils text-warning"></i><h6>Food (BTG)</h6></div></div>
+        <div class="col-6"><div class="menu-hub-card" onclick="openSection('bmi')"><i class="fa-solid fa-weight-scale text-info"></i><h6>BMI Wellness</h6></div></div>
+        <div class="col-6">
+          <div class="menu-hub-card position-relative" onclick="openSection('checkup')">
+            <span class="position-absolute top-0 end-0 translate-middle badge rounded-pill bg-danger d-none" id="hubCheckupBadge">0</span>
+            <i class="fa-solid fa-stethoscope text-danger"></i><h6>Checkup Tracking</h6>
+          </div>
+        </div>
+        <div class="col-6"><div class="menu-hub-card" onclick="openSection('productSales')"><i class="fa-solid fa-boxes-stacked text-warning"></i><h6>Product Tracking</h6></div></div>
+        <div class="col-6"><div class="menu-hub-card" onclick="openSection('reports')"><i class="fa-solid fa-file-invoice text-secondary"></i><h6>Reports</h6></div></div>
+        <div class="col-6 admin-only"><div class="menu-hub-card" onclick="openSection('coaches')"><i class="fa-solid fa-user-tie text-dark"></i><h6>Coaches</h6></div></div>
+        <div class="col-6"><div class="menu-hub-card" onclick="openSection('dataManager')"><i class="fa-solid fa-cloud-arrow-up text-primary"></i><h6>Backup</h6></div></div>
+        <div class="col-6 admin-only"><div class="menu-hub-card" onclick="openSection('advanceSettings')"><i class="fa-solid fa-triangle-exclamation text-danger"></i><h6>Settings</h6></div></div>
+      </div>
+    </div>
+
+    <!-- 90-DAY CHECKUP NOTIFICATION BANNER WITH CLEAR CONTROLS -->
+    <div class="card p-3 mb-3 bg-white border-0 shadow-sm no-print" id="checkupNotificationCard">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="fw-bold mb-0 text-dark">
+          <i class="fa-solid fa-bell text-warning me-2"></i> Checkup Follow-up Reminders (90-Day Schedule)
+        </h6>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-danger rounded-pill" id="totalDueCheckupsBadge">0 Due</span>
+          <button class="btn btn-sm btn-outline-secondary py-0 px-2 fw-semibold" onclick="clearAllNotifications()" title="Dismiss All Reminders">
+            <i class="fa-solid fa-check-double me-1"></i> Clear All
+          </button>
+        </div>
+      </div>
+      <div id="checkupNotificationList" class="small">
+        <span class="text-muted">Analyzing consumer schedules...</span>
+      </div>
+    </div>
+
+    <!-- ADMIN COACH FILTER -->
+    <div class="card p-2 p-md-3 mb-3 bg-white border-0 shadow-sm admin-only no-print" id="adminFilterCard">
+      <div class="d-flex align-items-center gap-2">
+        <i class="fa-solid fa-filter text-success"></i>
+        <span class="small fw-bold text-dark">Filter Coach:</span>
+        <select id="adminCoachFilter" class="form-select form-select-sm w-auto fw-semibold border-success" onchange="filterDataBySelectedCoach()">
+          <option value="ALL">🌟 All Coaches (Full Team)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 1. CONSUMER MASTER -->
+    <div id="view-consumers" class="tab-view active-tab no-print">
+      <div class="card p-3 p-md-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="text-success mb-0 fw-bold"><i class="fa-solid fa-address-book me-2"></i> Consumer Directory</h5>
+          <button class="btn btn-success btn-sm" onclick="openAddConsumerModal()"><i class="fa-solid fa-plus me-1"></i> Add Consumer</button>
+        </div>
+        <div class="mobile-cards-view" id="consumerMobileCards"></div>
+        <div class="desktop-table-view table-responsive">
+          <table class="table table-hover align-middle text-center">
+            <thead>
+              <tr><th>Sr.</th><th>Code</th><th class="text-start">Consumer Name</th><th>Coach</th><th>Gender</th><th>Mobile</th><th>Join Date</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="consumerTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. ATTENDANCE -->
+    <div id="view-attendance" class="tab-view no-print">
+      <div class="card p-3 p-md-4 mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+          <h5 class="text-success mb-0 fw-bold" id="attHeaderTitle"><i class="fa-solid fa-clipboard-user me-2"></i> Daily Live Attendance</h5>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <input type="date" id="dailyAttDate" class="form-control form-control-sm w-auto fw-bold" onchange="renderAttendance()">
+            <input type="month" id="monthlyAttPicker" class="form-control form-control-sm w-auto fw-bold d-none" onchange="renderAttendance()">
+            <button class="btn btn-primary btn-sm fw-bold shadow-sm" id="btnToggleAttView" onclick="toggleAttendanceViewMode()"><i class="fa-solid fa-calendar-days me-1"></i> Month View</button>
+            <button class="btn btn-danger btn-sm" onclick="closeDayAttendance()"><i class="fa-solid fa-lock me-1"></i> Close</button>
+          </div>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-4"><div class="p-2 bg-light rounded border text-center"><span class="small text-muted">Total</span><h5 class="fw-bold mb-0" id="statTotalConsumers">0</h5></div></div>
+          <div class="col-4"><div class="p-2 bg-success bg-opacity-10 rounded border border-success text-center"><span class="small text-success">Present</span><h5 class="fw-bold mb-0 text-success" id="statPresentToday">0</h5></div></div>
+          <div class="col-4"><div class="p-2 bg-danger bg-opacity-10 rounded border border-danger text-center"><span class="small text-danger">Absent</span><h5 class="fw-bold mb-0 text-danger" id="statAbsentToday">0</h5></div></div>
+        </div>
+        <div id="dayViewContainer">
+          <div class="mobile-cards-view" id="attMobileCards"></div>
+          <div class="desktop-table-view table-responsive">
+            <table class="table align-middle text-center">
+              <thead><tr><th>Sr.</th><th>Code</th><th class="text-start">Name</th><th>Mobile</th><th>Status</th><th>Action</th><th>Report</th></tr></thead>
+              <tbody id="dailyAttTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="monthViewContainer" class="d-none">
+          <div class="table-responsive bg-white rounded border p-2">
+            <table class="table table-bordered table-sm text-center align-middle" style="min-width: 650px;">
+              <thead class="table-light"><tr id="monthAttHeaderRow"></tr></thead>
+              <tbody id="monthAttTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. BTG FOOD -->
+    <div id="view-btg" class="tab-view no-print">
+      <div class="card p-3 p-md-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <h5 class="text-success mb-0 fw-bold"><i class="fa-solid fa-bowl-rice me-2"></i> BTG Daily Food</h5>
+            <small class="text-muted">Consumer name par click karke Diet Popup dekhein.</small>
+          </div>
+          <input type="date" id="btgDate" class="form-control form-control-sm w-auto fw-bold" onchange="renderBTG()">
+        </div>
+        <div class="mobile-cards-view" id="btgMobileCards"></div>
+        <div class="desktop-table-view table-responsive">
+          <table class="table table-bordered align-middle text-center table-hover">
+            <thead>
+              <tr><th>Sr.</th><th class="text-start">Name</th><th>Afresh</th><th>BF Shake</th><th>Snacks</th><th>Salad</th><th>Lunch</th><th>Af-Lunch</th><th>Snacks</th><th>DN Shake</th><th>Rep</th></tr>
+            </thead>
+            <tbody id="btgTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. BMI & WELLNESS -->
+    <div id="view-bmi" class="tab-view no-print">
+      <div class="row">
+        <div class="col-lg-4 mb-3">
+          <div class="card p-3 border-start border-success border-4">
+            <h6 class="text-success fw-bold border-bottom pb-2 mb-3"><i class="fa-solid fa-notes-medical me-1"></i> Evaluation Slip Entry</h6>
+            <form id="bmiForm">
+              <div class="mb-2"><label class="form-label small fw-bold">Consumer *</label><select id="bmiConsumerSelect" class="form-select form-select-sm" required=""></select></div>
+              <div class="row g-2 mb-2">
+                <div class="col-6"><label class="form-label small fw-bold">Date *</label><input type="date" id="bmiDate" class="form-control form-control-sm" required=""></div>
+                <div class="col-6"><label class="form-label small fw-bold">Weight (kg) *</label><input type="number" step="0.1" id="bmiWeight" class="form-control form-control-sm" required="" placeholder="70.5"></div>
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col-6"><label class="form-label small fw-bold">BMI</label><input type="number" step="0.1" id="bmiVal" class="form-control form-control-sm" placeholder="24.2"></div>
+                <div class="col-6"><label class="form-label small fw-bold">VFA</label><input type="number" step="0.1" id="bmiVFA" class="form-control form-control-sm" placeholder="8"></div>
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col-6"><label class="form-label small fw-bold">Fat %</label><input type="number" step="0.1" id="bmiFat" class="form-control form-control-sm" placeholder="25"></div>
+                <div class="col-6"><label class="form-label small fw-bold">Body Age</label><input type="number" id="bmiBodyAge" class="form-control form-control-sm" placeholder="32"></div>
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col-6"><label class="form-label small fw-bold">R.M. (kcal)</label><input type="number" id="bmiRM" class="form-control form-control-sm" placeholder="1400"></div>
+                <div class="col-6"><label class="form-label small fw-bold">S.M. %</label><input type="number" step="0.1" id="bmiSM" class="form-control form-control-sm" placeholder="28"></div>
+              </div>
+              <div class="mb-3"><label class="form-label small fw-bold">Waist Line (Inch)</label><input type="text" id="bmiWaist" class="form-control form-control-sm" placeholder="34 inch"></div>
+              <button type="submit" class="btn btn-success btn-sm w-100 fw-bold shadow-sm"><i class="fa-solid fa-save me-1"></i> Save Evaluation</button>
+            </form>
+          </div>
+        </div>
+        <div class="col-lg-8">
+          <div class="card p-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+              <div>
+                <h6 class="text-success fw-bold mb-0"><i class="fa-solid fa-chart-line me-1"></i> Wellness &amp; BMI Evaluation Logs</h6>
+                <small class="text-muted">Consumer name par click karke evaluation slip dekhein.</small>
+              </div>
+              <select id="filterBmiConsumer" class="form-select form-select-sm w-auto fw-bold" onchange="renderBMIHistory()">
+                <option value="all">🌟 All Consumers</option>
+              </select>
+            </div>
+            <div class="mobile-cards-view" id="bmiMobileCards"></div>
+            <div class="desktop-table-view table-responsive">
+              <table class="table table-bordered table-sm text-center align-middle table-hover">
+                <thead class="table-light">
+                  <tr><th>Date</th><th>Name</th><th>Weight</th><th>BMI</th><th>VFA</th><th>Fat %</th><th>Age</th><th>R.M.</th><th>S.M. %</th><th>Waist</th><th>Slip</th><th>Del</th></tr>
+                </thead>
+                <tbody id="bmiTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. CHECKUP TRACKING -->
+    <div id="view-checkup" class="tab-view no-print">
+      <div class="card p-3 p-md-4">
+        <h5 class="text-success mb-3 fw-bold"><i class="fa-solid fa-file-medical me-2"></i> Checkup Tracking</h5>
+        <div class="mobile-cards-view" id="checkupMobileCards"></div>
+        <div class="desktop-table-view table-responsive">
+          <table class="table table-bordered align-middle text-center table-sm">
+            <thead class="table-light">
+              <tr>
+                <th style="width:40px;">Sr.</th>
+                <th class="text-start">Name</th>
+                <th>Start (Join Date)</th>
+                <th>1st</th><th>2nd</th><th>3rd</th><th>4th</th><th>5th</th><th>6th</th><th>7th</th>
+                <th style="width:140px;">Remarks</th>
+                <th>Save</th><th>Rep</th>
+              </tr>
+            </thead>
+            <tbody id="checkupTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. PRODUCT TRACKING -->
+    <div id="view-productSales" class="tab-view no-print">
+      <div class="row">
+        <div class="col-lg-4 mb-3">
+          <div class="card p-3 border-start border-warning border-4">
+            <h6 class="text-dark fw-bold border-bottom pb-2 mb-3"><i class="fa-solid fa-cart-plus me-1 text-warning"></i> Product Tracking Entry</h6>
+            <form id="salesDispatchForm">
+              <div class="mb-2">
+                <label class="form-label small fw-bold">Consumer Name *</label>
+                <select id="salesConsumerSelect" class="form-select form-select-sm" required=""></select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label small fw-bold">Date *</label>
+                <input type="date" id="salesDate" class="form-control form-control-sm" required="">
+              </div>
+
+              <!-- MULTI-PRODUCT DYNAMIC LIST CONTAINER -->
+              <div id="dynamicProductRowsContainer">
+                <div class="product-row-item p-2 mb-2 bg-light border rounded position-relative">
+                  <div class="mb-1">
+                    <label class="form-label small fw-bold text-dark mb-0">Product Keyword / Name *</label>
+                    <input type="text" class="form-control form-control-sm fw-bold border-primary salesProductSearchInput" list="masterProductsDatalist" placeholder="Type keyword &amp; press Tab..." required="" onkeydown="handleProductTabKey(event)" onchange="onProductSearchSelect(this)" oninput="onProductSearchSelect(this)">
+                    <input type="hidden" class="salesSelectedProductId" value="">
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <div style="flex-grow:1;">
+                      <label class="form-label small fw-bold text-dark mb-0">Quantity *</label>
+                      <input type="number" class="form-control form-control-sm salesQty" min="1" value="1" required="">
+                    </div>
+                    <div style="padding-top:18px;">
+                      <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="removeProductRow(this)" title="Remove Item"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <datalist id="masterProductsDatalist"><option value="Formula 1 Shake Mix Vanilla (500g)"></option><option value="Formula 1 Shake Mix Chocolate (500g)"></option><option value="Formula 1 Shake Mix Mango (500g)"></option><option value="Formula 1 Shake Mix Orange Cream (500g)"></option><option value="Formula 1 Shake Mix Strawberry (500g)"></option><option value="Formula 1 Shake Mix Kulfi (500g)"></option><option value="Formula 1 Shake Mix Banana Caramel (500g)"></option><option value="Formula 1 Shake Mix Rose Kheer (500g)"></option><option value="Formula 1 Shake Mix Paan (500g)"></option><option value="Formula 1 Shake Mango (750g)"></option><option value="Formula 1 Shake Vanilla (750g)"></option><option value="Formula 1 Shake Rose Kheer (750g)"></option><option value="Formula 1 Shake Kulfi (750g)"></option><option value="Personalized Protein Powder (200g)"></option><option value="Personalized Protein Powder (400g)"></option><option value="ShakeMate (500g)"></option><option value="Afresh Energy Drink Mix Ginger (50g)"></option><option value="Afresh Energy Drink Mix Elaichi (50g)"></option><option value="Afresh Energy Drink Mix Lemon (50g)"></option><option value="Afresh Energy Drink Mix Peach (50g)"></option><option value="Afresh Energy Drink Mix Cinnamon (50g)"></option><option value="Afresh Energy Drink Kashmiri Kahwa (40g)"></option><option value="Afresh Energy Drink Tulsi (Basil 50g)"></option><option value="Activated Fiber (90 Tablets)"></option><option value="Active Fiber Complex Unflavoured (200g)"></option><option value="Aloe Plus (60 Capsules)"></option><option value="Herbal Aloe Concentrate Original (500ml)"></option><option value="Simply Probiotic (30 Sachets)"></option><option value="Vritilife Triphala (60 Tablets)"></option><option value="Multivitamin Mineral &amp; Herbal (90 Tabs)"></option><option value="Cell Activator (60 Tablets)"></option><option value="Cell-U-Loss Advanced (90 Tablets)"></option><option value="Herbal Control (90 Tablets)"></option><option value="Herbalifeline (60 Softgels)"></option><option value="Herbalife Calcium Tablets (60 Tabs)"></option><option value="Joint Support (90 Tablets)"></option><option value="Niteworks (300g)"></option><option value="HN Skin Booster Orange (30 Sachets)"></option><option value="DinoShake Chocolicious (200g)"></option><option value="DinoShake Strawberry (200g)"></option><option value="H24 Hydrate (20 Sachets)"></option><option value="H24 Rebuild Strength (10 Sachets)"></option></datalist>
+
+              <button type="button" class="btn btn-outline-success btn-sm w-100 fw-bold mb-2" onclick="addProductRowItem()">
+                <i class="fa-solid fa-plus me-1"></i> Add Another Product (Multi-Add)
+              </button>
+
+              <button type="submit" class="btn btn-warning w-100 fw-bold shadow-sm py-2">
+                <i class="fa-solid fa-floppy-disk me-1"></i> Save All Product Entries
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div class="col-lg-8">
+          <div class="card p-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+              <div>
+                <h6 class="text-dark fw-bold mb-0"><i class="fa-solid fa-boxes-stacked me-1 text-success"></i> Customer Product Tracking Logs</h6>
+                <small class="text-muted">Record of products provided to each customer.</small>
+              </div>
+              <select id="filterSalesConsumer" class="form-select form-select-sm w-auto fw-bold" onchange="renderSalesHistory()">
+                <option value="all">🌟 All Consumers</option>
+              </select>
+            </div>
+            
+            <div class="mobile-cards-view" id="salesMobileCards"></div>
+            
+            <div class="desktop-table-view table-responsive">
+              <table class="table table-bordered table-sm text-center align-middle table-hover">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width:40px;">Sr.</th>
+                    <th class="text-start">Consumer Name</th>
+                    <th>Date</th>
+                    <th class="text-start">Product</th>
+                    <th style="width:90px;">Quantity</th>
+                    <th style="width:50px;">Del</th>
+                  </tr>
+                </thead>
+                <tbody id="salesTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. REPORTS CENTER -->
+    <div id="view-reports" class="tab-view no-print">
+      <div class="card p-3 p-md-4 mx-auto shadow-sm" style="max-width:600px;">
+        <h5 class="text-success text-center mb-3 fw-bold"><i class="fa-solid fa-sliders me-2"></i> Combo Health Report Generator</h5>
+        <div class="mb-3">
+          <label class="form-label small fw-bold">Consumer Chunein:</label>
+          <select id="reportGenConsumer" class="form-select border-success fw-bold"></select>
+        </div>
+        <div class="p-3 bg-light rounded mb-3 border">
+          <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="chkRepProfile" checked=""><label class="form-check-label small fw-bold">Profile Info &amp; Ideal Weight</label></div>
+          <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="chkRepBMI" checked=""><label class="form-check-label small fw-bold">Body Composition &amp; BMI Evaluation</label></div>
+          <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="chkRepAtt" checked=""><label class="form-check-label small fw-bold">Monthly Attendance Record</label></div>
+          <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="chkRepBTG" checked=""><label class="form-check-label small fw-bold">Food (BTG) Diet Tracking</label></div>
+          <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="chkRepCheckup" checked=""><label class="form-check-label small fw-bold">Follow-up Checkup Tracking</label></div>
+          <div class="form-check"><input class="form-check-input" type="checkbox" id="chkRepSales" checked=""><label class="form-check-label small fw-bold">Product Tracking History</label></div>
+        </div>
+        <button class="btn btn-success w-100 py-2 fw-bold shadow-sm" onclick="generateComboReport()"><i class="fa-solid fa-print me-2"></i> Generate &amp; View Full Combo Report</button>
+      </div>
+    </div>
+
+    <!-- 8. COACH MANAGEMENT -->
+    <div id="view-coaches" class="tab-view admin-only no-print">
+      <div class="card p-3 p-md-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="text-success mb-0 fw-bold"><i class="fa-solid fa-user-tie me-2"></i> Club Coaches &amp; Team Directory</h5>
+          <button class="btn btn-success btn-sm" onclick="openAddCoachModal()"><i class="fa-solid fa-plus me-1"></i> Add Coach</button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle text-center">
+            <thead>
+              <tr><th>Sr.</th><th>Coach ID</th><th>Name</th><th>Mobile</th><th>PIN</th><th>Members</th><th>Action</th></tr>
+            </thead>
+            <tbody id="coachTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 9. CLOUD BACKUP -->
+    <div id="view-dataManager" class="tab-view no-print">
+      <div class="card p-3 p-md-4">
+        <h5 class="text-primary mb-3 fw-bold"><i class="fa-solid fa-cloud-arrow-up me-2"></i> Cloud Data Backup</h5>
+        <button class="btn btn-primary w-100 py-2 fw-bold mb-3" onclick="exportDataBackup()"><i class="fa-solid fa-download me-2"></i> Download JSON Backup</button>
+        <div class="admin-only border-top pt-3">
+          <label class="small fw-bold mb-1">Restore Backup File:</label>
+          <input type="file" id="restoreFileInput" class="form-control form-control-sm mb-2" accept=".json">
+          <button class="btn btn-outline-info btn-sm w-100" onclick="importDataBackup()">Push to Cloud</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 10. ADVANCE SETTINGS -->
+    <div id="view-advanceSettings" class="tab-view admin-only no-print">
+      <div class="card p-3 p-md-4 border-start border-4 border-danger">
+        <h5 class="text-danger mb-3 fw-bold"><i class="fa-solid fa-triangle-exclamation me-2"></i> Advance Settings &amp; Admin Security</h5>
+        <div class="mb-4">
+          <label class="small fw-bold">Change Master Admin Password</label>
+          <div class="input-group input-group-sm" style="max-width: 400px;">
+            <input type="password" id="newAdminPasswordInput" class="form-control" placeholder="New Password">
+            <button class="btn btn-success" onclick="updateAdminPassword()">Save</button>
+          </div>
+        </div>
+        <div class="p-3 bg-danger bg-opacity-10 border border-danger rounded">
+          <h6 class="text-danger fw-bold mb-1"><i class="fa-solid fa-skull-crossbones me-1"></i> Master Cloud Data Reset (All-in-One)</h6>
+          <p class="small text-muted mb-3">Ek hi click mein Cloud ka saara data (Consumers, Diet, Attendance, Evaluation, Products) hamesha ke liye delete ho jayega.</p>
+          <button class="btn btn-danger fw-bold px-4 shadow-sm" onclick="executeMasterReset()"><i class="fa-solid fa-trash-can me-2"></i> MASTER RESET ALL DATA</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CONSUMER MODAL (HEIGHT OPTIONAL) -->
+  <div class="modal fade no-print" id="addConsumerModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+          <h5 class="modal-title">Consumer Form</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="consumerForm">
+            <input type="hidden" id="mEditId" value="">
+            <div class="mb-2"><label class="form-label small fw-bold">Name *</label><input type="text" id="mName" class="form-control form-control-sm" required="" placeholder="Full Name" oninput="autoGenerateCode()"></div>
+            <div class="row g-2 mb-2">
+              <div class="col-6"><label class="form-label small fw-bold text-success">Code *</label><input type="text" id="mCode" class="form-control form-control-sm bg-light fw-bold text-success" required=""></div>
+              <div class="col-6"><label class="form-label small fw-bold">Join Date *</label><input type="date" id="mJoinDate" class="form-control form-control-sm" required=""></div>
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label class="form-label small fw-bold">Gender *</label>
+                <select id="mGender" class="form-select form-select-sm" required="" onchange="calculateIdealWeight()"><option value="Male">Male</option><option value="Female">Female</option></select>
+              </div>
+              <div class="col-6"><label class="form-label small fw-bold">Mobile *</label><input type="tel" id="mPhone" class="form-control form-control-sm" required="" placeholder="Mobile"></div>
+            </div>
+            <div class="mb-2 admin-only"><label class="form-label small fw-bold">Assign Coach</label><select id="mAssignCoach" class="form-select form-select-sm"></select></div>
+            <div class="row g-2 mb-3">
+              <div class="col-4"><label class="form-label small fw-bold">Age</label><input type="number" id="mAge" class="form-control form-control-sm"></div>
+              <div class="col-4">
+                <label class="form-label small fw-bold">Height (Optional)</label>
+                <select id="mHeight" class="form-select form-select-sm" onchange="calculateIdealWeight()">
+                  <option value="">Select Height</option>
+                  <option value="4'6">4'6" (137 cm)</option><option value="4'7">4'7" (140 cm)</option><option value="4'8">4'8" (142 cm)</option><option value="4'9">4'9" (145 cm)</option><option value="4'10">4'10" (147 cm)</option><option value="4'11">4'11" (150 cm)</option>
+                  <option value="5'0">5'0" (152 cm)</option><option value="5'1">5'1" (155 cm)</option><option value="5'2">5'2" (157 cm)</option><option value="5'3">5'3" (160 cm)</option><option value="5'4">5'4" (163 cm)</option><option value="5'5">5'5" (165 cm)</option>
+                  <option value="5'6">5'6" (168 cm)</option><option value="5'7">5'7" (170 cm)</option><option value="5'8">5'8" (173 cm)</option><option value="5'9">5'9" (175 cm)</option><option value="5'10">5'10" (178 cm)</option><option value="5'11">5'11" (180 cm)</option>
+                  <option value="6'0">6'0" (183 cm)</option><option value="6'1">6'1" (185 cm)</option><option value="6'2">6'2" (188 cm)</option><option value="6'3">6'3" (191 cm)</option><option value="6'4">6'4" (193 cm)</option><option value="6'5">6'5" (196 cm)</option><option value="6'6">6'6" (198 cm)</option>
+                </select>
+              </div>
+              <div class="col-4">
+                <label class="form-label small fw-bold text-success">WHO Ideal Wt</label>
+                <input type="number" step="0.1" id="mIdealWt" class="form-control form-control-sm bg-light fw-bold text-success" placeholder="Auto" readonly="">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-success w-100 fw-bold">Save Consumer</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COACH MODAL -->
+  <div class="modal fade no-print" id="addCoachModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+          <h5 class="modal-title">Add Coach</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="coachForm">
+            <div class="mb-2"><label class="form-label small fw-bold">Name *</label><input type="text" id="coachName" class="form-control form-control-sm" required=""></div>
+            <div class="mb-2"><label class="form-label small fw-bold">Mobile (Username) *</label><input type="tel" id="coachPhone" class="form-control form-control-sm" required=""></div>
+            <div class="mb-2"><label class="form-label small fw-bold">Coach ID *</label><input type="text" id="coachCode" class="form-control form-control-sm" required="" placeholder="COACH-01"></div>
+            <div class="mb-3"><label class="form-label small fw-bold text-success">Password PIN (Optional)</label><input type="password" id="coachPass" class="form-control form-control-sm" placeholder="Default: 1234 (Optional)"></div>
+            <button type="submit" class="btn btn-success w-100">Save Coach</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BTG DIET MODAL -->
+  <div class="modal fade no-print" id="btgConsumerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+          <div>
+            <h5 class="modal-title mb-0" id="btgModalConsumerName">Diet Record</h5>
+            <small class="opacity-75" id="btgModalConsumerCode">BWC</small>
+          </div>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-3">
+          <ul class="nav nav-pills nav-fill mb-3">
+            <li class="nav-item"><button class="nav-link active fw-bold py-1" id="tabBtgDayBtn" onclick="switchBtgModalTab('day')"><i class="fa-solid fa-calendar-day me-1"></i> Day View</button></li>
+            <li class="nav-item"><button class="nav-link fw-bold py-1" id="tabBtgMonthBtn" onclick="switchBtgModalTab('month')"><i class="fa-solid fa-calendar-days me-1"></i> Month View</button></li>
+          </ul>
+          <div id="btgModalDayView">
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <label class="small fw-bold">Date:</label>
+              <input type="date" id="btgModalDateInput" class="form-control form-control-sm w-auto fw-bold" onchange="renderBtgModalContent()">
+            </div>
+            <div class="p-3 bg-light rounded border">
+              <h6 class="text-success fw-bold mb-2">Daily Food Checklist</h6>
+              <div class="btg-chip-grid" id="btgModalDayChips"></div>
+            </div>
+          </div>
+          <div id="btgModalMonthView" class="d-none">
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <label class="small fw-bold">Month:</label>
+              <input type="month" id="btgModalMonthInput" class="form-control form-control-sm w-auto fw-bold" onchange="renderBtgModalContent()">
+            </div>
+            <div class="table-responsive bg-white rounded border">
+              <table class="table table-bordered table-sm text-center align-middle mb-0" style="min-width: 600px;">
+                <thead class="table-light">
+                  <tr><th>Day</th><th>Afresh</th><th>BF Shake</th><th>Snacks</th><th>Salad</th><th>Lunch</th><th>Af-Lunch</th><th>Snacks</th><th>DN Shake</th></tr>
+                </thead>
+                <tbody id="btgModalMonthTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer d-flex justify-content-between">
+          <button type="button" class="btn btn-outline-success btn-sm fw-bold" onclick="printBtgDietFromModal()"><i class="fa-solid fa-print me-1"></i> Print Report</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UNIVERSAL REPORT VIEWER MODAL -->
+  <div class="modal fade no-print" id="reportViewerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+          <h5 class="modal-title" id="reportModalTitle">Report Preview</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-3 p-md-4" id="previewModalArea">
+          <div style="width:100%; max-width: 760px; margin: 0 auto; background: #ffffff;">
+            <div class="text-center border-bottom pb-1 mb-2">
+              <h5 class="text-success fw-bold mb-0">BHARAT WELLNESS CLUB</h5>
+              <small class="text-muted" id="reportSubtitle" style="font-size:0.75rem;">Official Club Record</small>
+            </div>
+            <div id="dynamicReportContent"></div>
+            <div class="text-center mt-2 pt-1 border-top text-muted" style="font-size: 0.7rem;">
+              Good Nutrition for Better Life • Bharat Wellness Club ERP
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-success btn-sm fw-bold px-3" onclick="triggerCleanPrint()"><i class="fa-solid fa-print me-1"></i> Print / Save PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyA4Q2m-5u7ST7I51td4GcB0goGpdWRaY4g",
+      authDomain: "bwc-morning-club.firebaseapp.com",
+      databaseURL: "https://bwc-morning-club-default-rtdb.firebaseio.com",
+      projectId: "bwc-morning-club",
+      storageBucket: "bwc-morning-club.firebasestorage.app",
+      messagingSenderId: "548591699422",
+      appId: "1:548591699422:web:b0ec29747297b5fc4ec94f"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // MASTER PRODUCTS DATABASE WITH ADVANCED SEARCH KEYS
+    const masterProductsDB = [
+      { id: "1247", name: "Formula 1 Shake Mix Vanilla (500g)", vp: 21.75, mrp: 2179, keys: "formula 1 f1 shake mix vanilla 1247" },
+      { id: "1248", name: "Formula 1 Shake Mix Chocolate (500g)", vp: 21.75, mrp: 2179, keys: "formula 1 f1 shake mix chocolate choc 1248" },
+      { id: "1249", name: "Formula 1 Shake Mix Mango (500g)", vp: 21.75, mrp: 2179, keys: "formula 1 f1 shake mix mango 1249" },
+      { id: "1269", name: "Formula 1 Shake Mix Orange Cream (500g)", vp: 21.75, mrp: 2179, keys: "formula 1 f1 shake mix orange cream 1269" },
+      { id: "1239", name: "Formula 1 Shake Mix Strawberry (500g)", vp: 21.75, mrp: 2179, keys: "formula 1 f1 shake mix strawberry straw 1239" },
+      { id: "4114", name: "Formula 1 Shake Mix Kulfi (500g)", vp: 21.75, mrp: 2179, keys: "formula 1 f1 shake mix kulfi ku 4114" },
+      { id: "082K", name: "Formula 1 Shake Mix Banana Caramel (500g)", vp: 21.75, mrp: 2179, keys: "formula 1 f1 shake mix banana caramel 082k" },
+      { id: "154K", name: "Formula 1 Shake Mix Rose Kheer (500g)", vp: 21.75, mrp: 2179, keys: "formula 1 f1 shake mix rose kheer rk 154k" },
+      { id: "2876", name: "Formula 1 Shake Mix Paan (500g)", vp: 21.75, mrp: 2179, keys: "formula 1 f1 shake mix paan 2876" },
+      { id: "406K", name: "Formula 1 Shake Mango (750g)", vp: 32.65, mrp: 3227, keys: "formula 1 f1 shake mango 750g 406k" },
+      { id: "407K", name: "Formula 1 Shake Vanilla (750g)", vp: 32.65, mrp: 3227, keys: "formula 1 f1 shake vanilla 750g 407k" },
+      { id: "408K", name: "Formula 1 Shake Rose Kheer (750g)", vp: 32.65, mrp: 3227, keys: "formula 1 f1 shake rose kheer 750g 408k" },
+      { id: "409K", name: "Formula 1 Shake Kulfi (750g)", vp: 32.65, mrp: 3227, keys: "formula 1 f1 shake kulfi ku 750g 409k" },
+      { id: "1233", name: "Personalized Protein Powder (200g)", vp: 11.50, mrp: 1233, keys: "personalized protein powder ppp 200g 1233" },
+      { id: "1569", name: "Personalized Protein Powder (400g)", vp: 22.50, mrp: 2485, keys: "personalized protein powder ppp 400g 1569" },
+      { id: "183K", name: "ShakeMate (500g)", vp: 6.45, mrp: 653, keys: "shakemate sm 500g 183k" },
+      { id: "1291", name: "Afresh Energy Drink Mix Ginger (50g)", vp: 7.80, mrp: 812, keys: "afresh energy drink mix ginger 1291" },
+      { id: "1294", name: "Afresh Energy Drink Mix Elaichi (50g)", vp: 7.80, mrp: 812, keys: "afresh energy drink mix elaichi cardamom 1294" },
+      { id: "1295", name: "Afresh Energy Drink Mix Lemon (50g)", vp: 7.80, mrp: 812, keys: "afresh energy drink mix lemon 1295" },
+      { id: "1296", name: "Afresh Energy Drink Mix Peach (50g)", vp: 7.80, mrp: 812, keys: "afresh energy drink mix peach 1296" },
+      { id: "1298", name: "Afresh Energy Drink Mix Cinnamon (50g)", vp: 7.80, mrp: 812, keys: "afresh energy drink mix cinnamon dalchini 1298" },
+      { id: "230K", name: "Afresh Energy Drink Kashmiri Kahwa (40g)", vp: 7.80, mrp: 812, keys: "afresh energy drink kashmiri kahwa 230k" },
+      { id: "080K", name: "Afresh Energy Drink Tulsi (Basil 50g)", vp: 7.80, mrp: 812, keys: "afresh energy drink tulsi basil 080k" },
+      { id: "1278", name: "Activated Fiber (90 Tablets)", vp: 15.25, mrp: 1636, keys: "activated fiber tablets af 1278" },
+      { id: "2865", name: "Active Fiber Complex Unflavoured (200g)", vp: 22.95, mrp: 2559, keys: "active fiber complex afc 2865" },
+      { id: "1295C", name: "Aloe Plus (60 Capsules)", vp: 9.40, mrp: 1059, keys: "aloe plus capsules 1295c" },
+      { id: "0006", name: "Herbal Aloe Concentrate Original (500ml)", vp: 24.90, mrp: 2696, keys: "herbal aloe concentrate hac liquid 0006" },
+      { id: "025K", name: "Simply Probiotic (30 Sachets)", vp: 21.55, mrp: 2209, keys: "simply probiotic 025k" },
+      { id: "180K", name: "Vritilife Triphala (60 Tablets)", vp: 11.25, mrp: 1089, keys: "vritilife triphala 180k" },
+      { id: "1232", name: "Multivitamin Mineral & Herbal (90 Tabs)", vp: 19.95, mrp: 2004, keys: "multivitamin mineral herbal mvm 1232" },
+      { id: "3123", name: "Cell Activator (60 Tablets)", vp: 21.95, mrp: 2215, keys: "cell activator ca 3123" },
+      { id: "0111", name: "Cell-U-Loss Advanced (90 Tablets)", vp: 15.75, mrp: 1705, keys: "cell-u-loss cul 0111" },
+      { id: "0077", name: "Herbal Control (90 Tablets)", vp: 32.95, mrp: 3433, keys: "herbal control hc 0077" },
+      { id: "0066", name: "Herbalifeline (60 Softgels)", vp: 25.25, mrp: 2567, keys: "herbalifeline omega 3 fish oil 0066" },
+      { id: "0020", name: "Herbalife Calcium Tablets (60 Tabs)", vp: 10.25, mrp: 1208, keys: "herbalife calcium tablets cal 0020" },
+      { id: "0555", name: "Joint Support (90 Tablets)", vp: 20.90, mrp: 2455, keys: "joint support js 0555" },
+      { id: "148K", name: "Niteworks (300g)", vp: 75.00, mrp: 7728, keys: "niteworks nit heart 148k" },
+      { id: "046K", name: "HN Skin Booster Orange (30 Sachets)", vp: 38.65, mrp: 3910, keys: "hn skin booster collagen 046k" },
+      { id: "1229", name: "DinoShake Chocolicious (200g)", vp: 9.60, mrp: 1115, keys: "dinoshake chocolicious kids 1229" },
+      { id: "1230", name: "DinoShake Strawberry (200g)", vp: 9.60, mrp: 1115, keys: "dinoshake strawberry kids 1230" },
+      { id: "1458", name: "H24 Hydrate (20 Sachets)", vp: 14.05, mrp: 1636, keys: "h24 hydrate sports 1458" },
+      { id: "0316", name: "H24 Rebuild Strength (10 Sachets)", vp: 24.70, mrp: 2616, keys: "h24 rebuild strength rs 0316" }
+    ];
+
+    var consumers = [];
+    var attendanceData = {};
+    var btgData = {};
+    var checkupData = {};
+    var bmiRecords = [];
+    var salesRecords = [];
+    var adminPass = null;
+
+    var selectedCoachFilter = 'ALL';
+    var isMonthViewActive = false;
+    var activeBtgModalConsumerId = null;
+
+    var dismissedCheckups = JSON.parse(localStorage.getItem('bwc_dismissed_notifications') || '[]');
+
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    const currentMonthStr = today.toISOString().slice(0, 7);
+    document.getElementById('dailyAttDate').value = todayStr;
+    document.getElementById('monthlyAttPicker').value = currentMonthStr;
+    document.getElementById('btgDate').value = todayStr;
+    document.getElementById('btgModalDateInput').value = todayStr;
+    document.getElementById('btgModalMonthInput').value = currentMonthStr;
+    document.getElementById('mJoinDate').value = todayStr;
+    document.getElementById('bmiDate').value = todayStr;
+    document.getElementById('salesDate').value = todayStr;
+
+    initCloudListeners();
+
+    function initCloudListeners() {
+      db.ref('settings/adminPass').on('value', snap => { 
+        adminPass = snap.val() || null;
+      });
+      db.ref('coaches').on('value', snap => { 
+        coaches = snap.val() ? Object.values(snap.val()) : []; 
+        updateCoachDropdowns(); 
+        renderCoaches(); 
+      });
+      db.ref('consumers').on('value', snap => { 
+        consumers = snap.val() ? Object.values(snap.val()) : []; 
+        refreshUI(); 
+      });
+      db.ref('attendance').on('value', snap => { 
+        attendanceData = snap.val() || {}; 
+        renderAttendance(); 
+      });
+      db.ref('btg').on('value', snap => { 
+        btgData = snap.val() || {}; 
+        renderBTG(); 
+        if (activeBtgModalConsumerId) renderBtgModalContent();
+      });
+      db.ref('bmiRecords').on('value', snap => { 
+        bmiRecords = snap.val() ? Object.values(snap.val()) : []; 
+        renderBMIHistory(); 
+      });
+      db.ref('checkups').on('value', snap => { 
+        checkupData = snap.val() || {}; 
+        renderCheckup(); 
+        updateCheckupNotifications(); 
+      });
+      db.ref('salesRecords').on('value', snap => {
+        salesRecords = snap.val() ? Object.values(snap.val()) : [];
+        renderSalesHistory();
+      });
+
+      populateMasterProductsDatalist();
+
+      if (currentUser) {
+        document.getElementById('authOverlay').style.display = 'none';
+        applyRoleView();
+        checkDeviceView();
+      } else {
+        document.getElementById('authOverlay').style.display = 'flex';
+      }
+    }
+
+    function isMobileView() { return window.innerWidth <= 992; }
+
+    function checkDeviceView() {
+      if (isMobileView()) {
+        showMobileHub();
+      } else {
+        openSection('consumers', document.getElementById('btn-nav-consumers'));
+      }
+    }
+
+    function showMobileHub() {
+      document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active-tab'));
+      document.getElementById('mobileDashboardHub').classList.remove('d-none');
+      document.getElementById('mobileBackBtn').classList.add('d-none');
+      document.getElementById('mobileHeaderTitle').innerHTML = '<i class="fa-solid fa-heart-pulse me-1"></i> Bharat Wellness';
+      document.getElementById('adminFilterCard').classList.add('d-none');
+    }
+
+    function openSection(viewId, btnEl) {
+      document.getElementById('mobileDashboardHub').classList.add('d-none');
+      document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active-tab'));
+      
+      const targetView = document.getElementById('view-' + viewId);
+      if (targetView) targetView.classList.add('active-tab');
+
+      document.querySelectorAll('.sidebar-menu .nav-btn').forEach(b => b.classList.remove('active'));
+      if (btnEl) btnEl.classList.add('active');
+      else {
+        const matchSidebarBtn = document.getElementById('btn-nav-' + viewId);
+        if (matchSidebarBtn) matchSidebarBtn.classList.add('active');
+      }
+
+      if (isMobileView()) {
+        document.getElementById('mobileBackBtn').classList.remove('d-none');
+        const titles = { consumers: 'Consumers', attendance: 'Attendance', btg: 'Food (BTG)', bmi: 'BMI Wellness', checkup: 'Checkup Tracking', productSales: 'Product Tracking', reports: 'Reports', coaches: 'Coaches', dataManager: 'Backup', advanceSettings: 'Settings' };
+        document.getElementById('mobileHeaderTitle').innerText = titles[viewId] || 'Section';
+      }
+
+      if (currentUser && currentUser.role === 'ADMIN' && !isMobileView()) {
+        document.getElementById('adminFilterCard').classList.remove('d-none');
+      }
+    }
+
+    function quickLogin(role, coachId, coachName) {
+      if (role === 'ADMIN') {
+        currentUser = { id: 'ADMIN', name: 'Master Admin', role: 'ADMIN' };
+      } else {
+        let matchedCoach = coaches.find(co => co.id === coachId || co.phone === coachId || (co.code && co.code.toLowerCase() === (coachId || '').toLowerCase()));
+        if (!matchedCoach && coachId && coachId !== 'COACH_DEMO') {
+          matchedCoach = coaches.find(co => co.id === coachId);
+        }
+        if (!matchedCoach) {
+          matchedCoach = coaches.length > 0 && coachId !== 'COACH_DEMO' ? coaches[0] : { id: 'COACH_DEMO', name: coachName || 'Demo Coach', role: 'COACH' };
+        }
+        currentUser = { id: matchedCoach.id, name: matchedCoach.name, role: 'COACH' };
+      }
+      sessionStorage.setItem('bwc_session_user', JSON.stringify(currentUser));
+      document.getElementById('authOverlay').style.display = 'none';
+      applyRoleView();
+      refreshUI();
+      checkDeviceView();
+    }
+
+    function quickLoginCoach() {
+      const select = document.getElementById('loginCoachSelect');
+      const coachId = select ? select.value : 'COACH_DEMO';
+      let coachName = 'Demo Coach';
+      if (select && select.selectedIndex >= 0) {
+        coachName = select.options[select.selectedIndex].text.replace(/^[^\w\u0900-\u097F]+/, '').trim();
+      }
+      quickLogin('COACH', coachId, coachName);
+    }
+
+    function logoutUser() {
+      if (confirm('Portal se logout karna chahte hain?')) {
+        sessionStorage.removeItem('bwc_session_user');
+        currentUser = null;
+        document.getElementById('authOverlay').style.display = 'flex';
+      }
+    }
+
+    function updateAdminPassword() {
+      const newP = document.getElementById('newAdminPasswordInput').value.trim();
+      if (!newP) return alert('Naya password likhein!');
+      db.ref('settings/adminPass').set(newP).then(() => {
+        adminPass = newP;
+        alert('Master Admin Password badal diya gaya hai!');
+        document.getElementById('newAdminPasswordInput').value = '';
+      }).catch(err => {
+        alert('Password update failed: ' + err.message);
+      });
+    }
+
+    // COACH PIN CHANGE FUNCTION
+    function updateCoachPassword(coachId, currentPhone) {
+      const newPin = prompt(`Coach (${currentPhone}) ke liye naya Password/PIN darj karein:`);
+      if (!newPin) return;
+      if (newPin.trim().length < 3) return alert('PIN kam se kam 3 anko ka hona chahiye!');
+
+      db.ref('coaches/' + coachId + '/password').set(newPin.trim()).then(() => {
+        alert('✅ Coach ka PIN safalta-purvak update ho gaya hai!');
+      }).catch(err => {
+        alert('Error: ' + err.message);
+      });
+    }
+
+    // 100% RELIABLE MASTER CLOUD RESET
+    function executeMasterReset() {
+      const confirmAuth = prompt("⚠️ DANGER: Kya aap Cloud ka SAARA DATA reset karna chahte hain?\nConfirm karne ke liye apna Master Admin Password likhein:");
+      if (!confirmAuth) return;
+
+      const expectedPass = adminPass ? adminPass : "1234";
+
+      if (confirmAuth.trim() === expectedPass) {
+        const wipeUpdates = {
+          'consumers': null,
+          'coaches': null,
+          'attendance': null,
+          'btg': null,
+          'bmiRecords': null,
+          'checkups': null,
+          'salesRecords': null
+        };
+
+        db.ref().update(wipeUpdates).then(() => {
+          consumers = [];
+          coaches = [];
+          attendanceData = {};
+          btgData = {};
+          bmiRecords = [];
+          checkupData = {};
+          salesRecords = [];
+          localStorage.removeItem('bwc_dismissed_notifications');
+          dismissedCheckups = [];
+
+          refreshUI();
+          alert('✅ Master Reset Complete! Saara cloud data safalta-purvak delete ho gaya hai.');
+          window.location.reload();
+        }).catch(err => {
+          alert('Reset Error: ' + err.message);
+        });
+      } else {
+        alert('Galat Password! Reset cancel kar diya gaya.');
+      }
+    }
+
+    function applyRoleView() {
+      if (!currentUser) return;
+      document.getElementById('activeUserNameDisplay').innerText = currentUser.name;
+      document.getElementById('activeUserRoleDisplay').innerHTML = currentUser.role === 'ADMIN' ? '<i class="fa-solid fa-crown me-1"></i> Admin' : `<i class="fa-solid fa-user-tie me-1"></i> Coach`;
+      document.getElementById('mobileUserWelcome').innerText = 'Namaste, ' + currentUser.name;
+      document.getElementById('mobileRoleWelcome').innerText = currentUser.role === 'ADMIN' ? 'Master Admin' : 'Coach Portal';
+
+      if (currentUser.role !== 'ADMIN') {
+        document.querySelectorAll('.admin-only').forEach(el => el.classList.add('d-none'));
+        selectedCoachFilter = currentUser.id;
+      } else {
+        document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
+      }
+    }
+
+    function getFilteredConsumers() {
+      if (!currentUser) return [];
+      if (currentUser.role !== 'ADMIN') return consumers.filter(c => c.coachId === currentUser.id);
+      if (selectedCoachFilter !== 'ALL') return consumers.filter(c => c.coachId === selectedCoachFilter);
+      return consumers;
+    }
+
+    function filterDataBySelectedCoach() {
+      selectedCoachFilter = document.getElementById('adminCoachFilter').value;
+      refreshUI();
+    }
+
+    function refreshUI() {
+      renderConsumers();
+      renderAttendance();
+      renderBTG();
+      renderCheckup();
+      updateConsumerDropdowns();
+      renderBMIHistory();
+      renderSalesHistory();
+      updateCheckupNotifications();
+      applyRoleView();
+    }
+
+    // 90-DAY CHECKUP NOTIFICATION ENGINE WITH CLEAR CONTROLS
+    function dismissSingleNotification(notificationKey) {
+      if (!dismissedCheckups.includes(notificationKey)) {
+        dismissedCheckups.push(notificationKey);
+        localStorage.setItem('bwc_dismissed_notifications', JSON.stringify(dismissedCheckups));
+      }
+      updateCheckupNotifications();
+    }
+
+    function clearAllNotifications() {
+      if (confirm('Kya aap sabhi current checkup notifications ko clear/dismiss karna chahte hain?')) {
+        const notifElements = document.querySelectorAll('[data-notif-key]');
+        notifElements.forEach(el => {
+          const key = el.getAttribute('data-notif-key');
+          if (key && !dismissedCheckups.includes(key)) {
+            dismissedCheckups.push(key);
+          }
+        });
+        localStorage.setItem('bwc_dismissed_notifications', JSON.stringify(dismissedCheckups));
+        updateCheckupNotifications();
+      }
+    }
+
+    function updateCheckupNotifications() {
+      const notifListEl = document.getElementById('checkupNotificationList');
+      const badgeTotal = document.getElementById('totalDueCheckupsBadge');
+      const sidebarBadge = document.getElementById('sidebarCheckupBadge');
+      const hubBadge = document.getElementById('hubCheckupBadge');
+
+      const list = getFilteredConsumers();
+      const checkupIntervalMilestones = [
+        { title: "1st Checkup", offsetDays: 3, field: "c1" },
+        { title: "2nd Checkup", offsetDays: 10, field: "c2" },
+        { title: "3rd Checkup", offsetDays: 17, field: "c3" },
+        { title: "4th Checkup", offsetDays: 24, field: "c4" },
+        { title: "5th Checkup", offsetDays: 31, field: "c5" },
+        { title: "6th Checkup", offsetDays: 41, field: "c6" },
+        { title: "7th Checkup", offsetDays: 51, field: "c7" },
+        { title: "8th Checkup", offsetDays: 61, field: "c8" },
+        { title: "9th Checkup", offsetDays: 71, field: "c9" },
+        { title: "10th Checkup", offsetDays: 81, field: "c10" },
+        { title: "Final 90-Day Checkup", offsetDays: 90, field: "c11" }
+      ];
+
+      const now = new Date(todayStr);
+      let dueReminders = [];
+
+      list.forEach(c => {
+        if (!c.joiningDate) return;
+        const joinDate = new Date(c.joiningDate);
+        const diffTime = now - joinDate;
+        const daysPassed = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        if (daysPassed >= 0 && daysPassed <= 90) {
+          const userChkData = checkupData[c.id] || {};
+
+          checkupIntervalMilestones.forEach(m => {
+            const isRecorded = userChkData[m.field] && userChkData[m.field].trim() !== "";
+            const isDueOrPast = daysPassed >= m.offsetDays;
+            const notifKey = `${c.id}_${m.field}`;
+
+            if (isDueOrPast && !isRecorded && !dismissedCheckups.includes(notifKey)) {
+              const dueDateObj = new Date(joinDate);
+              dueDateObj.setDate(dueDateObj.getDate() + m.offsetDays);
+              const dueDateString = dueDateObj.toISOString().slice(0, 10);
+              const isToday = daysPassed === m.offsetDays;
+
+              dueReminders.push({
+                notifKey: notifKey,
+                consumerId: c.id,
+                consumerName: c.name,
+                consumerPhone: c.phone,
+                title: m.title,
+                dueDate: dueDateString,
+                daysPassed: daysPassed,
+                isToday: isToday
+              });
+            }
+          });
+        }
+      });
+
+      const dueCount = dueReminders.length;
+      badgeTotal.innerText = `${dueCount} Due`;
+      if (dueCount > 0) {
+        sidebarBadge.innerText = dueCount;
+        sidebarBadge.classList.remove('d-none');
+        hubBadge.innerText = dueCount;
+        hubBadge.classList.remove('d-none');
+      } else {
+        sidebarBadge.classList.add('d-none');
+        hubBadge.classList.add('d-none');
+      }
+
+      if (dueCount === 0) {
+        notifListEl.innerHTML = `
+          <div class="d-flex justify-content-between align-items-center">
+            <span class="text-success"><i class="fa-solid fa-circle-check me-1"></i> Sabhi follow-ups cleared aur up-to-date hain!</span>
+            ${dismissedCheckups.length > 0 ? `<button class="btn btn-sm btn-link text-muted p-0" onclick="localStorage.removeItem('bwc_dismissed_notifications'); dismissedCheckups=[]; updateCheckupNotifications();" style="font-size:0.75rem;">Reset Dismissed</button>` : ''}
+          </div>
+        `;
+      } else {
+        let itemsHTML = '';
+        dueReminders.slice(0, 8).forEach(r => {
+          itemsHTML += `
+            <div class="notif-card ${r.isToday ? 'due-today' : 'upcoming'} d-flex justify-content-between align-items-center" data-notif-key="${r.notifKey}">
+              <div>
+                <strong class="text-dark">${r.consumerName}</strong> 
+                <span class="badge ${r.isToday ? 'bg-danger' : 'bg-warning text-dark'} ms-1">${r.title}</span>
+                <div class="text-muted" style="font-size:0.75rem;">
+                  <i class="fa-regular fa-calendar me-1"></i> Due Date: <strong>${r.dueDate}</strong> (${r.daysPassed} days since join)
+                </div>
+              </div>
+              <div class="d-flex gap-1 align-items-center">
+                <a href="https://wa.me/91${(r.consumerPhone||'').replace(/\D/g,'')}?text=Namaste%20${encodeURIComponent(r.consumerName)},%20Aapka%20${encodeURIComponent(r.title)}%20Bharat%20Wellness%20Club%20par%20due%20hai." target="_blank" class="btn btn-sm btn-success py-0 px-2" title="WhatsApp Reminder"><i class="fa-brands fa-whatsapp"></i></a>
+                <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="openSection('checkup')" title="Update Checkup"><i class="fa-solid fa-pen-to-square"></i></button>
+                <button class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="dismissSingleNotification('${r.notifKey}')" title="Dismiss Reminder"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+            </div>
+          `;
+        });
+        notifListEl.innerHTML = itemsHTML;
+      }
+    }
+
+    function autoGenerateCode() {
+      if (document.getElementById('mEditId').value) return;
+      const name = document.getElementById('mName').value.trim();
+      if (name.length > 0) document.getElementById('mCode').value = `BWC/${name.split(/\s+/)[0].toUpperCase()}`;
+      else document.getElementById('mCode').value = '';
+    }
+
+    function calculateIdealWeight() {
+      const gender = document.getElementById('mGender').value;
+      const height = document.getElementById('mHeight').value;
+      const idealWtInput = document.getElementById('mIdealWt');
+
+      const whoIdealChart = {
+        "4'6":  { Male: 41.3, Female: 40.4 },
+        "4'7":  { Male: 43.1, Female: 42.1 },
+        "4'8":  { Male: 44.4, Female: 43.4 },
+        "4'9":  { Male: 46.2, Female: 45.2 },
+        "4'10": { Male: 47.5, Female: 46.5 },
+        "4'11": { Male: 49.5, Female: 48.4 },
+        "5'0":  { Male: 50.8, Female: 49.7 },
+        "5'1":  { Male: 52.9, Female: 51.7 },
+        "5'2":  { Male: 54.2, Female: 53.0 },
+        "5'3":  { Male: 56.3, Female: 55.0 },
+        "5'4":  { Male: 58.4, Female: 57.1 },
+        "5'5":  { Male: 59.9, Female: 58.5 },
+        "5'6":  { Male: 62.1, Female: 60.7 },
+        "5'7":  { Male: 63.6, Female: 62.1 },
+        "5'8":  { Male: 65.8, Female: 64.3 },
+        "5'9":  { Male: 67.4, Female: 65.8 },
+        "5'10": { Male: 69.7, Female: 68.1 },
+        "5'11": { Male: 71.3, Female: 69.7 },
+        "6'0":  { Male: 73.7, Female: 72.0 },
+        "6'1":  { Male: 75.3, Female: 73.6 },
+        "6'2":  { Male: 77.8, Female: 76.0 },
+        "6'3":  { Male: 80.3, Female: 78.4 },
+        "6'4":  { Male: 82.0, Female: 80.1 },
+        "6'5":  { Male: 84.5, Female: 82.6 },
+        "6'6":  { Male: 86.3, Female: 84.3 }
+      };
+
+      if (height && whoIdealChart[height]) {
+        idealWtInput.value = whoIdealChart[height][gender];
+      } else {
+        idealWtInput.value = '';
+      }
+    }
+
+    // 1. CONSUMER CRUD (HEIGHT OPTIONAL + PROPER COACH ASSIGNMENT DROPDOWN)
+    function openAddConsumerModal() {
+      document.getElementById('consumerForm').reset();
+      document.getElementById('mEditId').value = '';
+      document.getElementById('mJoinDate').value = todayStr;
+      document.getElementById('mIdealWt').value = '';
+      populateModalCoachDropdown();
+      new bootstrap.Modal(document.getElementById('addConsumerModal')).show();
+    }
+
+    function populateModalCoachDropdown() {
+      const coachSelect = document.getElementById('mAssignCoach');
+      if (!coachSelect) return;
+      coachSelect.innerHTML = '<option value="ADMIN">Master Admin (Direct)</option>';
+      coaches.forEach(co => {
+        coachSelect.innerHTML += `<option value="${co.id}">${co.name} (${co.code})</option>`;
+      });
+    }
+
+    function editConsumer(id) {
+      const c = consumers.find(item => item.id === id);
+      if (!c) return;
+      populateModalCoachDropdown();
+      document.getElementById('mEditId').value = c.id;
+      document.getElementById('mName').value = c.name;
+      document.getElementById('mCode').value = c.code;
+      document.getElementById('mJoinDate').value = c.joiningDate;
+      document.getElementById('mGender').value = c.gender || 'Male';
+      document.getElementById('mPhone').value = c.phone === '-' ? '' : c.phone;
+      document.getElementById('mAge').value = c.age === '-' ? '' : c.age;
+      document.getElementById('mHeight').value = c.height === '-' ? '' : c.height;
+      document.getElementById('mIdealWt').value = c.idealWeight === '-' ? '' : c.idealWeight;
+      document.getElementById('mAssignCoach').value = c.coachId || 'ADMIN';
+      new bootstrap.Modal(document.getElementById('addConsumerModal')).show();
+    }
+
+    document.getElementById('consumerForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const editId = document.getElementById('mEditId').value;
+      
+      // FIX: Ensure correct coach assignment whether added by Admin or Coach
+      let assignedCoachId = 'ADMIN';
+      if (currentUser && currentUser.role === 'ADMIN') {
+        const coachDropdownVal = document.getElementById('mAssignCoach').value;
+        assignedCoachId = coachDropdownVal ? coachDropdownVal : 'ADMIN';
+      } else if (currentUser && currentUser.role === 'COACH') {
+        assignedCoachId = currentUser.id;
+      }
+
+      const consumerId = editId ? parseInt(editId) : Date.now();
+      const consumerData = {
+        id: consumerId,
+        code: document.getElementById('mCode').value,
+        name: document.getElementById('mName').value,
+        gender: document.getElementById('mGender').value,
+        phone: document.getElementById('mPhone').value || '-',
+        age: document.getElementById('mAge').value || '-',
+        height: document.getElementById('mHeight').value || '-',
+        idealWeight: document.getElementById('mIdealWt').value || '-',
+        joiningDate: document.getElementById('mJoinDate').value,
+        coachId: assignedCoachId
+      };
+      db.ref('consumers/' + consumerId).set(consumerData);
+      bootstrap.Modal.getInstance(document.getElementById('addConsumerModal')).hide();
+      this.reset();
+    });
+
+    function renderConsumers() {
+      const tbody = document.getElementById('consumerTableBody');
+      const mobileContainer = document.getElementById('consumerMobileCards');
+      tbody.innerHTML = '';
+      mobileContainer.innerHTML = '';
+      const list = getFilteredConsumers();
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Koi Consumer nahi mila.</td></tr>';
+        mobileContainer.innerHTML = '<div class="text-center text-muted p-4">Koi Consumer nahi mila.</div>';
+        return;
+      }
+
+      list.forEach((c, index) => {
+        const coachObj = coaches.find(co => co.id === c.coachId) || { name: 'Master Admin' };
+        
+        mobileContainer.innerHTML += `
+          <div class="app-consumer-card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <h6 class="fw-bold mb-0 text-success" onclick="generateSingleProfileReport(${c.id})">${c.name}</h6>
+                <span class="badge bg-secondary" style="font-size:0.7rem;">${c.code}</span>
+                <span class="badge ${c.gender === 'Female' ? 'bg-danger' : 'bg-primary'}" style="font-size:0.7rem;">${c.gender || 'Male'}</span>
+                <span class="badge bg-dark" style="font-size:0.65rem;">Coach: ${coachObj.name}</span>
+              </div>
+              <div>
+                <button class="btn btn-sm btn-outline-primary py-1 px-2" onclick="editConsumer(${c.id})"><i class="fa-solid fa-pen"></i></button>
+                <button class="btn btn-sm btn-outline-danger py-1 px-2" onclick="deleteConsumer(${c.id})"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center small text-muted">
+              <span><i class="fa-solid fa-phone me-1"></i> ${c.phone}</span>
+              <div class="d-flex gap-1">
+                <a href="tel:${c.phone}" class="btn btn-sm btn-light border py-0 px-2"><i class="fa-solid fa-phone text-primary"></i></a>
+                <a href="https://wa.me/91${(c.phone||'').replace(/\D/g,'')}" target="_blank" class="btn btn-sm btn-light border py-0 px-2"><i class="fa-brands fa-whatsapp text-success"></i></a>
+                <button class="btn btn-sm btn-outline-success py-0 px-2" onclick="generateSingleProfileReport(${c.id})"><i class="fa-solid fa-file-lines"></i> Report</button>
+              </div>
+            </div>
+          </div>
+        `;
+
+        tbody.innerHTML += `
+          <tr>
+            <td>${index + 1}</td>
+            <td><span class="badge bg-secondary">${c.code}</span></td>
+            <td class="text-start fw-bold text-success cursor-pointer" onclick="generateSingleProfileReport(${c.id})">${c.name}</td>
+            <td><span class="badge bg-dark">${coachObj.name}</span></td>
+            <td><span class="badge ${c.gender === 'Female' ? 'bg-danger' : 'bg-primary'}">${c.gender || 'Male'}</span></td>
+            <td>${c.phone}</td>
+            <td>${c.joiningDate}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary" onclick="editConsumer(${c.id})"><i class="fa-solid fa-pen"></i></button>
+              <button class="btn btn-sm btn-outline-danger" onclick="deleteConsumer(${c.id})"><i class="fa-solid fa-trash"></i></button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    function deleteConsumer(id) {
+      if(confirm('Is consumer ko delete karein?')) db.ref('consumers/' + id).remove();
+    }
+
+    // 2. ATTENDANCE
+    function getAttendanceKey(selectedDate, consumerId) {
+      const parts = selectedDate.split('-');
+      return `${parts[0]}-${parts[1]}_${consumerId}_${parseInt(parts[2])}`;
+    }
+
+    function toggleAttendanceViewMode() {
+      isMonthViewActive = !isMonthViewActive;
+      const btn = document.getElementById('btnToggleAttView');
+      const headerTitle = document.getElementById('attHeaderTitle');
+      const dailyInput = document.getElementById('dailyAttDate');
+      const monthInput = document.getElementById('monthlyAttPicker');
+      const dayContainer = document.getElementById('dayViewContainer');
+      const monthContainer = document.getElementById('monthViewContainer');
+
+      if (isMonthViewActive) {
+        btn.innerHTML = '<i class="fa-solid fa-calendar-day me-1"></i> Day View';
+        btn.className = 'btn btn-secondary btn-sm fw-bold shadow-sm';
+        headerTitle.innerHTML = '<i class="fa-solid fa-table-cells me-2"></i> Monthly Attendance Register';
+        dailyInput.classList.add('d-none');
+        monthInput.classList.remove('d-none');
+        dayContainer.classList.add('d-none');
+        monthContainer.classList.remove('d-none');
+      } else {
+        btn.innerHTML = '<i class="fa-solid fa-calendar-days me-1"></i> Month View';
+        btn.className = 'btn btn-primary btn-sm fw-bold shadow-sm';
+        headerTitle.innerHTML = '<i class="fa-solid fa-clipboard-user me-2"></i> Daily Live Attendance';
+        dailyInput.classList.remove('d-none');
+        monthInput.classList.add('d-none');
+        dayContainer.classList.remove('d-none');
+        monthContainer.classList.add('d-none');
+      }
+      renderAttendance();
+    }
+
+    function renderAttendance() {
+      if (isMonthViewActive) renderMonthlySheet();
+      else renderDailySheet();
+    }
+
+    function renderDailySheet() {
+      const selectedDate = document.getElementById('dailyAttDate').value;
+      const tbody = document.getElementById('dailyAttTableBody');
+      const mobileContainer = document.getElementById('attMobileCards');
+      tbody.innerHTML = '';
+      mobileContainer.innerHTML = '';
+      const list = getFilteredConsumers();
+
+      let presentCount = 0;
+      let absentCount = 0;
+
+      list.forEach((c, index) => {
+        const attKey = getAttendanceKey(selectedDate, c.id);
+        const isPresent = attendanceData[attKey] === true;
+        if (isPresent) presentCount++; else absentCount++;
+
+        mobileContainer.innerHTML += `
+          <div class="app-consumer-card ${isPresent ? 'present-border' : 'absent-border'}">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <h6 class="fw-bold mb-0 text-dark">${c.name}</h6>
+                <small class="text-muted">${c.phone}</small>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                ${isPresent 
+                  ? `<button class="btn btn-sm btn-success fw-bold px-3" onclick="toggleDailyAttendance('${selectedDate}', ${c.id}, false)">✔ Present</button>`
+                  : `<button class="btn btn-sm btn-outline-danger fw-bold px-3" onclick="toggleDailyAttendance('${selectedDate}', ${c.id}, true)">Absent</button>`
+                }
+                <button class="btn btn-sm btn-light border py-1 px-2" onclick="generateAttendanceReportOnly(${c.id})"><i class="fa-solid fa-file-lines text-muted"></i></button>
+              </div>
+            </div>
+          </div>
+        `;
+
+        tbody.innerHTML += `
+          <tr class="${isPresent ? 'bg-success bg-opacity-10' : 'bg-danger bg-opacity-10'}">
+            <td>${index + 1}</td>
+            <td><span class="badge bg-secondary">${c.code}</span></td>
+            <td class="text-start fw-bold">${c.name}</td>
+            <td>${c.phone}</td>
+            <td>${isPresent ? '<span class="badge bg-success">PRESENT</span>' : '<span class="badge bg-danger">ABSENT</span>'}</td>
+            <td>
+              ${isPresent
+                ? `<button class="btn btn-sm btn-outline-danger" onclick="toggleDailyAttendance('${selectedDate}', ${c.id}, false)">Absent</button>`
+                : `<button class="btn btn-sm btn-success px-3 fw-bold" onclick="toggleDailyAttendance('${selectedDate}', ${c.id}, true)">✔ Present</button>`
+              }
+            </td>
+            <td><button class="btn btn-sm btn-outline-info py-0 px-2" onclick="generateAttendanceReportOnly(${c.id})"><i class="fa-solid fa-print"></i></button></td>
+          </tr>
+        `;
+      });
+
+      document.getElementById('statTotalConsumers').innerText = list.length;
+      document.getElementById('statPresentToday').innerText = presentCount;
+      document.getElementById('statAbsentToday').innerText = absentCount;
+    }
+
+    function renderMonthlySheet() {
+      const monthStr = document.getElementById('monthlyAttPicker').value;
+      const headerRow = document.getElementById('monthAttHeaderRow');
+      const tbody = document.getElementById('monthAttTableBody');
+      const list = getFilteredConsumers();
+
+      const year = parseInt(monthStr.split('-')[0]);
+      const monthIndex = parseInt(monthStr.split('-')[1]);
+      const totalDays = new Date(year, monthIndex, 0).getDate();
+
+      headerRow.innerHTML = '<th>Sr.</th><th class="text-start" style="min-width:140px;">Name</th>';
+      for (let d = 1; d <= totalDays; d++) headerRow.innerHTML += `<th style="width:30px; font-size:0.75rem;">${d}</th>`;
+      headerRow.innerHTML += '<th>Total</th>';
+
+      tbody.innerHTML = '';
+      if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${totalDays + 3}" class="text-muted p-3">Koi consumer nahi mila.</td></tr>`;
+        return;
+      }
+
+      list.forEach((c, index) => {
+        let totalPresent = 0;
+        let daysHTML = '';
+
+        for (let d = 1; d <= totalDays; d++) {
+          const attKey = `${monthStr}_${c.id}_${d}`;
+          const isPresent = attendanceData[attKey] === true;
+          if (isPresent) totalPresent++;
+
+          daysHTML += `
+            <td style="cursor:pointer;" class="${isPresent ? 'bg-success text-white fw-bold' : 'text-muted'}" 
+                onclick="toggleMonthlyCell('${attKey}', ${!isPresent})">
+              ${isPresent ? '✔' : '·'}
+            </td>
+          `;
+        }
+
+        tbody.innerHTML += `
+          <tr>
+            <td>${index + 1}</td>
+            <td class="text-start fw-bold text-dark">${c.name}</td>
+            ${daysHTML}
+            <td><span class="badge bg-success">${totalPresent}</span></td>
+          </tr>
+        `;
+      });
+    }
+
+    function toggleMonthlyCell(attKey, status) { db.ref('attendance/' + attKey).set(status); }
+    function toggleDailyAttendance(selectedDate, consumerId, status) { db.ref('attendance/' + getAttendanceKey(selectedDate, consumerId)).set(status); }
+
+    function closeDayAttendance() {
+      const selectedDate = document.getElementById('dailyAttDate').value;
+      if (!confirm(`Date (${selectedDate}) ka register close karein?`)) return;
+      getFilteredConsumers().forEach(c => {
+        const attKey = getAttendanceKey(selectedDate, c.id);
+        if (attendanceData[attKey] !== true) db.ref('attendance/' + attKey).set(false);
+      });
+      alert('Day close complete!');
+    }
+
+    // 3. BTG FOOD & MODAL
+    const btgFields = [
+      { key: 'afresh', label: 'Afresh' },
+      { key: 'bf_shake', label: 'BF Shake' },
+      { key: 'snack1', label: 'Snack 1' },
+      { key: 'salad', label: 'Salad' },
+      { key: 'lunch', label: 'Lunch' },
+      { key: 'af_lunch', label: 'Af-Lunch' },
+      { key: 'snack2', label: 'Snack 2' },
+      { key: 'dn_shake', label: 'DN Shake' }
+    ];
+
+    function renderBTG() {
+      const date = document.getElementById('btgDate').value;
+      const tbody = document.getElementById('btgTableBody');
+      const mobileContainer = document.getElementById('btgMobileCards');
+      tbody.innerHTML = '';
+      mobileContainer.innerHTML = '';
+      const list = getFilteredConsumers();
+
+      list.forEach((c, index) => {
+        const itemKey = `${date}_${c.id}`;
+        const data = btgData[itemKey] || {};
+
+        let mobileChipsHTML = '';
+        btgFields.forEach(f => {
+          const isDone = data[f.key] === true;
+          mobileChipsHTML += `
+            <div class="btg-chip ${isDone ? 'active' : ''}" onclick="toggleBTGCell('${itemKey}', '${f.key}')">
+              ${isDone ? '✔ ' : ''}${f.label}
+            </div>
+          `;
+        });
+
+        mobileContainer.innerHTML += `
+          <div class="app-consumer-card">
+            <div class="d-flex justify-content-between align-items-center">
+              <h6 class="fw-bold mb-0 clickable-link" onclick="openBtgConsumerModal(${c.id})">${c.name}</h6>
+              <button class="btn btn-sm btn-outline-success py-0 px-2" onclick="generateBTGReportOnly(${c.id})"><i class="fa-solid fa-print"></i> Report</button>
+            </div>
+            <div class="btg-chip-grid">${mobileChipsHTML}</div>
+          </div>
+        `;
+
+        let cellsHTML = '';
+        btgFields.forEach(field => {
+          const isDone = data[field.key] === true;
+          cellsHTML += `<td class="cursor-pointer ${isDone ? 'bg-success text-white fw-bold' : ''}" onclick="toggleBTGCell('${itemKey}', '${field.key}')">${isDone ? '✔' : '—'}</td>`;
+        });
+        tbody.innerHTML += `
+          <tr>
+            <td>${index + 1}</td>
+            <td class="text-start fw-bold clickable-link" onclick="openBtgConsumerModal(${c.id})">${c.name}</td>
+            ${cellsHTML}
+            <td><button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="generateBTGReportOnly(${c.id})"><i class="fa-solid fa-print"></i></button></td>
+          </tr>
+        `;
+      });
+    }
+
+    function toggleBTGCell(itemKey, field) {
+      const currentVal = (btgData[itemKey] && btgData[itemKey][field]) === true;
+      db.ref(`btg/${itemKey}/${field}`).set(!currentVal);
+    }
+
+    function openBtgConsumerModal(consumerId) {
+      activeBtgModalConsumerId = consumerId;
+      const c = consumers.find(item => item.id === consumerId);
+      if (!c) return;
+
+      document.getElementById('btgModalConsumerName').innerText = `Diet Tracker: ${c.name}`;
+      document.getElementById('btgModalConsumerCode').innerText = `Code: ${c.code} | Mobile: ${c.phone}`;
+      
+      switchBtgModalTab('day');
+      renderBtgModalContent();
+      new bootstrap.Modal(document.getElementById('btgConsumerModal')).show();
+    }
+
+    function switchBtgModalTab(tab) {
+      const dayView = document.getElementById('btgModalDayView');
+      const monthView = document.getElementById('btgModalMonthView');
+      const dayBtn = document.getElementById('tabBtgDayBtn');
+      const monthBtn = document.getElementById('tabBtgMonthBtn');
+
+      if (tab === 'day') {
+        dayView.classList.remove('d-none');
+        monthView.classList.add('d-none');
+        dayBtn.classList.add('active');
+        monthBtn.classList.remove('active');
+      } else {
+        dayView.classList.add('d-none');
+        monthView.classList.remove('d-none');
+        dayBtn.classList.remove('active');
+        monthBtn.classList.add('active');
+      }
+      renderBtgModalContent();
+    }
+
+    function renderBtgModalContent() {
+      if (!activeBtgModalConsumerId) return;
+
+      const selectedDay = document.getElementById('btgModalDateInput').value;
+      const dayKey = `${selectedDay}_${activeBtgModalConsumerId}`;
+      const dayData = btgData[dayKey] || {};
+      const dayChipsContainer = document.getElementById('btgModalDayChips');
+      dayChipsContainer.innerHTML = '';
+
+      btgFields.forEach(f => {
+        const isDone = dayData[f.key] === true;
+        dayChipsContainer.innerHTML += `
+          <div class="btg-chip ${isDone ? 'active' : ''}" onclick="toggleBTGCell('${dayKey}', '${f.key}')">
+            ${isDone ? '✔ ' : ''}${f.label}
+          </div>
+        `;
+      });
+
+      const selectedMonth = document.getElementById('btgModalMonthInput').value;
+      const monthTbody = document.getElementById('btgModalMonthTableBody');
+      monthTbody.innerHTML = '';
+
+      const year = parseInt(selectedMonth.split('-')[0]);
+      const monthIndex = parseInt(selectedMonth.split('-')[1]);
+      const totalDays = new Date(year, monthIndex, 0).getDate();
+
+      for (let d = 1; d <= totalDays; d++) {
+        const dateStr = `${selectedMonth}-${d < 10 ? '0' + d : d}`;
+        const rowData = btgData[`${dateStr}_${activeBtgModalConsumerId}`] || {};
+
+        let mealCols = '';
+        btgFields.forEach(f => {
+          const isCheck = rowData[f.key] === true;
+          mealCols += `<td class="${isCheck ? 'bg-success text-white fw-bold' : 'text-muted'}">${isCheck ? '✔' : '—'}</td>`;
+        });
+
+        monthTbody.innerHTML += `<tr><td class="fw-bold">${d}</td>${mealCols}</tr>`;
+      }
+    }
+
+    function printBtgDietFromModal() {
+      if (!activeBtgModalConsumerId) return;
+      generateBTGReportOnly(activeBtgModalConsumerId);
+    }
+
+    // 4. BMI & WELLNESS
+    function updateConsumerDropdowns() {
+      const select = document.getElementById('bmiConsumerSelect');
+      const filter = document.getElementById('filterBmiConsumer');
+      const repSelect = document.getElementById('reportGenConsumer');
+      const salesSelect = document.getElementById('salesConsumerSelect');
+      const salesFilter = document.getElementById('filterSalesConsumer');
+
+      select.innerHTML = '<option value="">-- Choose Consumer --</option>';
+      filter.innerHTML = '<option value="all">🌟 All Consumers</option>';
+      repSelect.innerHTML = '<option value="">-- Choose Consumer --</option>';
+      salesSelect.innerHTML = '<option value="">-- Choose Consumer --</option>';
+      salesFilter.innerHTML = '<option value="all">🌟 All Consumers</option>';
+
+      getFilteredConsumers().forEach(c => {
+        select.innerHTML += `<option value="${c.id}">${c.name} (${c.code})</option>`;
+        filter.innerHTML += `<option value="${c.id}">${c.name} (${c.code})</option>`;
+        repSelect.innerHTML += `<option value="${c.id}">${c.name} (${c.code})</option>`;
+        salesSelect.innerHTML += `<option value="${c.id}">${c.name} (${c.code})</option>`;
+        salesFilter.innerHTML += `<option value="${c.id}">${c.name} (${c.code})</option>`;
+      });
+    }
+
+    document.getElementById('bmiForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const cid = parseInt(document.getElementById('bmiConsumerSelect').value);
+      if(!cid) return alert('Consumer select karein!');
+
+      const recordId = Date.now();
+      const record = {
+        id: recordId,
+        consumerId: cid,
+        date: document.getElementById('bmiDate').value,
+        weight: document.getElementById('bmiWeight').value,
+        bmi: document.getElementById('bmiVal').value || '-',
+        vfa: document.getElementById('bmiVFA').value || '-',
+        fat: document.getElementById('bmiFat').value || '-',
+        bodyAge: document.getElementById('bmiBodyAge').value || '-',
+        rm: document.getElementById('bmiRM').value || '-',
+        sm: document.getElementById('bmiSM').value || '-',
+        waist: document.getElementById('bmiWaist').value || '-'
+      };
+
+      db.ref('bmiRecords/' + recordId).set(record);
+      this.reset();
+      document.getElementById('bmiDate').value = todayStr;
+      alert('BMI record saved!');
+    });
+
+    function renderBMIHistory() {
+      const filterVal = document.getElementById('filterBmiConsumer').value;
+      const tbody = document.getElementById('bmiTableBody');
+      const mobileContainer = document.getElementById('bmiMobileCards');
+      tbody.innerHTML = '';
+      mobileContainer.innerHTML = '';
+      const listConsumers = getFilteredConsumers();
+
+      let list = bmiRecords.filter(r => listConsumers.some(c => c.id === r.consumerId));
+      if(filterVal !== 'all') list = list.filter(r => r.consumerId == filterVal);
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="12" class="text-muted p-3">Koi Evaluation Entry nahi mili.</td></tr>';
+        mobileContainer.innerHTML = '<div class="text-center text-muted p-3">Koi Evaluation Entry nahi mili.</div>';
+        return;
+      }
+
+      list.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+      list.forEach(r => {
+        const c = consumers.find(item => item.id === r.consumerId) || { name: 'Unknown', id: r.consumerId };
+        
+        mobileContainer.innerHTML += `
+          <div class="app-consumer-card">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <h6 class="fw-bold mb-0 clickable-link" onclick="generateBMIReportOnly(${c.id})">${c.name}</h6>
+              <span class="badge bg-light text-dark border">${r.date}</span>
+            </div>
+            <div class="row g-1 text-center small my-2">
+              <div class="col-4 p-1 bg-light border rounded"><span class="text-muted d-block" style="font-size:0.65rem;">Weight</span><strong>${r.weight} kg</strong></div>
+              <div class="col-4 p-1 bg-light border rounded"><span class="text-muted d-block" style="font-size:0.65rem;">BMI</span><strong>${r.bmi}</strong></div>
+              <div class="col-4 p-1 bg-light border rounded"><span class="text-muted d-block" style="font-size:0.65rem;">VFA</span><strong>${r.vfa}</strong></div>
+              <div class="col-4 p-1 bg-light border rounded"><span class="text-muted d-block" style="font-size:0.65rem;">Fat %</span><strong>${r.fat}%</strong></div>
+              <div class="col-4 p-1 bg-light border rounded"><span class="text-muted d-block" style="font-size:0.65rem;">Body Age</span><strong>${r.bodyAge}</strong></div>
+              <div class="col-4 p-1 bg-light border rounded"><span class="text-muted d-block" style="font-size:0.65rem;">R.M.</span><strong>${r.rm} kcal</strong></div>
+              <div class="col-4 p-1 bg-light border rounded"><span class="text-muted d-block" style="font-size:0.65rem;">S.M. %</span><strong>${r.sm}%</strong></div>
+              <div class="col-4 p-1 bg-light border rounded"><span class="text-muted d-block" style="font-size:0.65rem;">Waist</span><strong>${r.waist}</strong></div>
+              <div class="col-4 p-1 bg-light border rounded"><span class="text-muted d-block" style="font-size:0.65rem;">Slip</span><button class="btn btn-sm btn-outline-success py-0 px-2" onclick="generateBMIReportOnly(${c.id})"><i class="fa-solid fa-print"></i></button></div>
+            </div>
+            <div class="d-flex justify-content-end align-items-center">
+              <button class="btn btn-sm btn-link text-danger p-0" onclick="db.ref('bmiRecords/' + ${r.id}).remove()"><i class="fa-solid fa-trash me-1"></i> Delete</button>
+            </div>
+          </div>
+        `;
+
+        tbody.innerHTML += `
+          <tr>
+            <td>${r.date}</td>
+            <td>${c.name}</td>
+            <td class="text-success fw-bold">${r.weight} kg</td>
+            <td>${r.bmi}</td>
+            <td>${r.vfa}</td>
+            <td>${r.fat}%</td>
+            <td>${r.bodyAge}</td>
+            <td>${r.rm}</td>
+            <td>${r.sm}%</td>
+            <td>${r.waist}</td>
+            <td><button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="generateBMIReportOnly(${c.id})"><i class="fa-solid fa-print"></i></button></td>
+            <td><button class="btn btn-sm btn-link text-danger p-0" onclick="db.ref('bmiRecords/' + ${r.id}).remove()"><i class="fa-solid fa-trash"></i></button></td>
+          </tr>
+        `;
+      });
+    }
+
+    // 5. CHECKUP TRACKING
+    function renderCheckup() {
+      const tbody = document.getElementById('checkupTableBody');
+      const mobileContainer = document.getElementById('checkupMobileCards');
+      tbody.innerHTML = '';
+      mobileContainer.innerHTML = '';
+      const list = getFilteredConsumers();
+
+      list.forEach((c, index) => {
+        const data = checkupData[c.id] || {};
+        const startDate = c.joiningDate || data.start || '-';
+        
+        mobileContainer.innerHTML += `
+          <div class="app-consumer-card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <h6 class="fw-bold mb-0 text-success">${c.name}</h6>
+                <small class="text-muted">Start (Join Date): <strong>${startDate}</strong></small>
+              </div>
+              <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="generateCheckupReportOnly(${c.id})"><i class="fa-solid fa-print"></i> Report</button>
+            </div>
+            <div class="row g-1 mb-2">
+              <div class="col-6"><label class="small text-muted" style="font-size:0.65rem;">1st Checkup</label><input type="date" class="form-control form-control-sm" id="m_chk_1_${c.id}" value="${data.c1 || ''}"></div>
+              <div class="col-6"><label class="small text-muted" style="font-size:0.65rem;">2nd Checkup</label><input type="date" class="form-control form-control-sm" id="m_chk_2_${c.id}" value="${data.c2 || ''}"></div>
+            </div>
+            <div class="row g-1 mb-2">
+              <div class="col-6"><label class="small text-muted" style="font-size:0.65rem;">3rd Checkup</label><input type="date" class="form-control form-control-sm" id="m_chk_3_${c.id}" value="${data.c3 || ''}"></div>
+              <div class="col-6"><label class="small text-muted" style="font-size:0.65rem;">4th Checkup</label><input type="date" class="form-control form-control-sm" id="m_chk_4_${c.id}" value="${data.c4 || ''}"></div>
+            </div>
+            <div class="row g-1 mb-2">
+              <div class="col-4"><label class="small text-muted" style="font-size:0.65rem;">5th</label><input type="date" class="form-control form-control-sm" id="m_chk_5_${c.id}" value="${data.c5 || ''}"></div>
+              <div class="col-4"><label class="small text-muted" style="font-size:0.65rem;">6th</label><input type="date" class="form-control form-control-sm" id="m_chk_6_${c.id}" value="${data.c6 || ''}"></div>
+              <div class="col-4"><label class="small text-muted" style="font-size:0.65rem;">7th</label><input type="date" class="form-control form-control-sm" id="m_chk_7_${c.id}" value="${data.c7 || ''}"></div>
+            </div>
+            <div class="d-flex gap-1 mb-2">
+              <input type="text" class="form-control form-control-sm" id="m_chk_r1_${c.id}" placeholder="Remark" value="${data.r1 || ''}">
+              <button class="btn btn-sm btn-success px-3" onclick="saveMobileCheckup(${c.id}, '${startDate}')"><i class="fa-solid fa-save"></i> Save</button>
+            </div>
+          </div>
+        `;
+
+        tbody.innerHTML += `
+          <tr>
+            <td>${index + 1}</td>
+            <td class="fw-bold text-start">${c.name}</td>
+            <td><input type="text" class="form-control form-control-sm bg-light text-center fw-bold" id="chk_start_${c.id}" value="${startDate}" readonly></td>
+            <td><input type="date" class="form-control form-control-sm" id="chk_1_${c.id}" value="${data.c1 || ''}"></td>
+            <td><input type="date" class="form-control form-control-sm" id="chk_2_${c.id}" value="${data.c2 || ''}"></td>
+            <td><input type="date" class="form-control form-control-sm" id="chk_3_${c.id}" value="${data.c3 || ''}"></td>
+            <td><input type="date" class="form-control form-control-sm" id="chk_4_${c.id}" value="${data.c4 || ''}"></td>
+            <td><input type="date" class="form-control form-control-sm" id="chk_5_${c.id}" value="${data.c5 || ''}"></td>
+            <td><input type="date" class="form-control form-control-sm" id="chk_6_${c.id}" value="${data.c6 || ''}"></td>
+            <td><input type="date" class="form-control form-control-sm" id="chk_7_${c.id}" value="${data.c7 || ''}"></td>
+            <td><input type="text" class="form-control form-control-sm" id="chk_r1_${c.id}" value="${data.r1 || ''}" placeholder="Remark"></td>
+            <td><button class="btn btn-sm btn-success" onclick="saveCheckup(${c.id}, '${startDate}')"><i class="fa-solid fa-save"></i></button></td>
+            <td><button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="generateCheckupReportOnly(${c.id})"><i class="fa-solid fa-print"></i></button></td>
+          </tr>
+        `;
+      });
+    }
+
+    function saveCheckup(id, autoStart) {
+      db.ref('checkups/' + id).set({
+        start: autoStart,
+        c1: document.getElementById(`chk_1_${id}`).value,
+        c2: document.getElementById(`chk_2_${id}`).value,
+        c3: document.getElementById(`chk_3_${id}`).value,
+        c4: document.getElementById(`chk_4_${id}`).value,
+        c5: document.getElementById(`chk_5_${id}`).value,
+        c6: document.getElementById(`chk_6_${id}`).value,
+        c7: document.getElementById(`chk_7_${id}`).value,
+        r1: document.getElementById(`chk_r1_${id}`).value
+      });
+      alert('Checkup Saved!');
+    }
+
+    function saveMobileCheckup(id, autoStart) {
+      db.ref('checkups/' + id).set({
+        start: autoStart,
+        c1: document.getElementById(`m_chk_1_${id}`).value,
+        c2: document.getElementById(`m_chk_2_${id}`).value,
+        c3: document.getElementById(`m_chk_3_${id}`).value,
+        c4: document.getElementById(`m_chk_4_${id}`).value,
+        c5: document.getElementById(`m_chk_5_${id}`).value,
+        c6: document.getElementById(`m_chk_6_${id}`).value,
+        c7: document.getElementById(`m_chk_7_${id}`).value,
+        r1: document.getElementById(`m_chk_r1_${id}`).value
+      });
+      alert('Checkup Saved!');
+    }
+
+    // 6. MULTI-PRODUCT TRACKING ENGINE
+    function populateMasterProductsDatalist() {
+      const dlist = document.getElementById('masterProductsDatalist');
+      dlist.innerHTML = '';
+      masterProductsDB.forEach(p => {
+        dlist.innerHTML += `<option value="${p.name}">`;
+      });
+    }
+
+    function findMatchingProduct(keyword) {
+      if (!keyword) return null;
+      keyword = keyword.trim().toLowerCase();
+      return masterProductsDB.find(p => 
+        p.keys.toLowerCase().includes(keyword) ||
+        p.name.toLowerCase().includes(keyword) ||
+        p.id.toLowerCase() === keyword
+      );
+    }
+
+    function handleProductTabKey(e) {
+      if (e.key === 'Tab') {
+        const input = e.target;
+        const typedVal = input.value.trim();
+        if (typedVal.length > 0) {
+          const matched = findMatchingProduct(typedVal);
+          if (matched) {
+            input.value = matched.name;
+            const parentRow = input.closest('.product-row-item');
+            const hiddenId = parentRow.querySelector('.salesSelectedProductId');
+            if (hiddenId) hiddenId.value = matched.id;
+          }
+        }
+      }
+    }
+
+    function onProductSearchSelect(inputElement) {
+      const searchVal = inputElement.value.trim().toLowerCase();
+      const matched = findMatchingProduct(searchVal);
+      const parentRow = inputElement.closest('.product-row-item');
+      const hiddenId = parentRow.querySelector('.salesSelectedProductId');
+
+      if (matched && hiddenId) {
+        hiddenId.value = matched.id;
+      } else if (hiddenId) {
+        hiddenId.value = '';
+      }
+    }
+
+    function addProductRowItem() {
+      const container = document.getElementById('dynamicProductRowsContainer');
+      const newRow = document.createElement('div');
+      newRow.className = 'product-row-item p-2 mb-2 bg-light border rounded position-relative';
+      newRow.innerHTML = `
+        <div class="mb-1">
+          <label class="form-label small fw-bold text-dark mb-0">Product Keyword / Name *</label>
+          <input type="text" class="form-control form-control-sm fw-bold border-primary salesProductSearchInput" list="masterProductsDatalist" placeholder="Type keyword & press Tab..." required onkeydown="handleProductTabKey(event)" onchange="onProductSearchSelect(this)" oninput="onProductSearchSelect(this)">
+          <input type="hidden" class="salesSelectedProductId" value="">
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <div style="flex-grow:1;">
+            <label class="form-label small fw-bold text-dark mb-0">Quantity *</label>
+            <input type="number" class="form-control form-control-sm salesQty" min="1" value="1" required>
+          </div>
+          <div style="padding-top:18px;">
+            <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="removeProductRow(this)" title="Remove Item"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>
+      `;
+      container.appendChild(newRow);
+    }
+
+    function removeProductRow(btn) {
+      const container = document.getElementById('dynamicProductRowsContainer');
+      if (container.children.length > 1) {
+        btn.closest('.product-row-item').remove();
+      } else {
+        alert('Kam se kam ek product hona zaroori hai!');
+      }
+    }
+
+    document.getElementById('salesDispatchForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const cid = parseInt(document.getElementById('salesConsumerSelect').value);
+      const dateVal = document.getElementById('salesDate').value;
+      if (!cid || !dateVal) return alert('Kripya Consumer aur Date select karein!');
+
+      const rowItems = document.querySelectorAll('.product-row-item');
+      if (rowItems.length === 0) return alert('Kam se kam ek product add karein!');
+
+      let successCount = 0;
+      rowItems.forEach(row => {
+        const searchInput = row.querySelector('.salesProductSearchInput').value.trim();
+        const qty = parseInt(row.querySelector('.salesQty').value) || 1;
+        if (searchInput) {
+          const matched = findMatchingProduct(searchInput);
+          const productName = matched ? matched.name : searchInput;
+          const salesId = Date.now() + Math.floor(Math.random() * 1000);
+          
+          const salesRecord = {
+            id: salesId,
+            consumerId: cid,
+            date: dateVal,
+            productName: productName,
+            qty: qty
+          };
+          db.ref('salesRecords/' + salesId).set(salesRecord);
+          successCount++;
+        }
+      });
+
+      if (successCount > 0) {
+        this.reset();
+        document.getElementById('salesDate').value = todayStr;
+        document.getElementById('dynamicProductRowsContainer').innerHTML = `
+          <div class="product-row-item p-2 mb-2 bg-light border rounded position-relative">
+            <div class="mb-1">
+              <label class="form-label small fw-bold text-dark mb-0">Product Keyword / Name *</label>
+              <input type="text" class="form-control form-control-sm fw-bold border-primary salesProductSearchInput" list="masterProductsDatalist" placeholder="Type keyword & press Tab..." required onkeydown="handleProductTabKey(event)" onchange="onProductSearchSelect(this)" oninput="onProductSearchSelect(this)">
+              <input type="hidden" class="salesSelectedProductId" value="">
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <div style="flex-grow:1;">
+                <label class="form-label small fw-bold text-dark mb-0">Quantity *</label>
+                <input type="number" class="form-control form-control-sm salesQty" min="1" value="1" required>
+              </div>
+              <div style="padding-top:18px;">
+                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="removeProductRow(this)" title="Remove Item"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </div>
+          </div>
+        `;
+        alert(`🎉 Sabhi ${successCount} products safalta-purvak save ho gaye hain!`);
+      }
+    });
+
+    function renderSalesHistory() {
+      const filterVal = document.getElementById('filterSalesConsumer').value;
+      const tbody = document.getElementById('salesTableBody');
+      const mobileContainer = document.getElementById('salesMobileCards');
+      tbody.innerHTML = '';
+      mobileContainer.innerHTML = '';
+      const listConsumers = getFilteredConsumers();
+
+      let list = salesRecords.filter(r => listConsumers.some(c => c.id === r.consumerId));
+      if (filterVal !== 'all') list = list.filter(r => r.consumerId == filterVal);
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-muted p-3">Koi Product Tracking record nahi mila.</td></tr>';
+        mobileContainer.innerHTML = '<div class="text-center text-muted p-3">Koi Product Tracking record nahi mila.</div>';
+        return;
+      }
+
+      list.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+      list.forEach((r, idx) => {
+        const c = consumers.find(item => item.id === r.consumerId) || { name: 'Unknown', id: r.consumerId, phone: '-' };
+        
+        mobileContainer.innerHTML += `
+          <div class="app-consumer-card">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <h6 class="fw-bold mb-0 text-success">${c.name}</h6>
+              <span class="badge bg-light text-dark border">${r.date}</span>
+            </div>
+            <div class="small fw-bold text-dark my-2">${r.productName}</div>
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="badge bg-primary px-3 py-2">Quantity: ${r.qty}</span>
+              <button class="btn btn-sm btn-link text-danger p-0" onclick="db.ref('salesRecords/' + ${r.id}).remove()"><i class="fa-solid fa-trash me-1"></i> Delete</button>
+            </div>
+          </div>
+        `;
+
+        tbody.innerHTML += `
+          <tr>
+            <td>${idx + 1}</td>
+            <td class="fw-bold text-start">${c.name}</td>
+            <td>${r.date}</td>
+            <td class="text-start">${r.productName}</td>
+            <td><strong class="badge bg-primary px-3 py-1">${r.qty}</strong></td>
+            <td><button class="btn btn-sm btn-link text-danger p-0" onclick="db.ref('salesRecords/' + ${r.id}).remove()"><i class="fa-solid fa-trash"></i></button></td>
+          </tr>
+        `;
+      });
+    }
+
+    // 7. COACH MANAGEMENT
+    function updateCoachDropdowns() {
+      const coachSelect = document.getElementById('mAssignCoach');
+      const adminFilter = document.getElementById('adminCoachFilter');
+      const loginCoachSelect = document.getElementById('loginCoachSelect');
+      if (coachSelect) coachSelect.innerHTML = '<option value="ADMIN">Master Admin (Direct)</option>';
+      if (adminFilter) adminFilter.innerHTML = '<option value="ALL">🌟 All Coaches (Full Team)</option>';
+      if (loginCoachSelect) loginCoachSelect.innerHTML = '<option value="COACH_DEMO">👤 Demo Coach</option>';
+
+      coaches.forEach(co => {
+        if (coachSelect) coachSelect.innerHTML += `<option value="${co.id}">${co.name} (${co.code})</option>`;
+        if (adminFilter) adminFilter.innerHTML += `<option value="${co.id}">Coach: ${co.name}</option>`;
+        if (loginCoachSelect) loginCoachSelect.innerHTML += `<option value="${co.id}">🧑‍💼 ${co.name} (${co.phone || co.code})</option>`;
+      });
+    }
+
+    function openAddCoachModal() {
+      document.getElementById('coachForm').reset();
+      new bootstrap.Modal(document.getElementById('addCoachModal')).show();
+    }
+
+    document.getElementById('coachForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const coachId = 'COACH_' + Date.now();
+      const enteredPass = document.getElementById('coachPass').value.trim();
+      db.ref('coaches/' + coachId).set({
+        id: coachId,
+        name: document.getElementById('coachName').value.trim(),
+        phone: document.getElementById('coachPhone').value.trim(),
+        code: document.getElementById('coachCode').value.trim(),
+        password: enteredPass || '1234'
+      });
+      bootstrap.Modal.getInstance(document.getElementById('addCoachModal')).hide();
+      this.reset();
+      alert('Coach added!');
+    });
+
+    function renderCoaches() {
+      const tbody = document.getElementById('coachTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      coaches.forEach((co, index) => {
+        const count = consumers.filter(c => c.coachId === co.id).length;
+        tbody.innerHTML += `
+          <tr>
+            <td>${index + 1}</td>
+            <td><span class="badge bg-secondary">${co.code}</span></td>
+            <td class="fw-bold">${co.name}</td>
+            <td>${co.phone}</td>
+            <td><code>${co.password || '****'}</code></td>
+            <td><span class="badge bg-success">${count} Members</span></td>
+            <td>
+              <button class="btn btn-sm btn-outline-warning py-0 px-2 me-1" onclick="updateCoachPassword('${co.id}', '${co.phone}')" title="Change PIN"><i class="fa-solid fa-key"></i></button>
+              <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="db.ref('coaches/' + '${co.id}').remove()" title="Delete Coach"><i class="fa-solid fa-trash"></i></button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    // 8. PRINT ENGINE & FULL COMBO REPORTS
+    function getProfileHTML(c) {
+      return `
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 4px; background:#f8fafc; border:1px solid #cbd5e1; padding: 6px 10px; border-radius: 6px; font-size: 11px; margin-bottom: 6px;">
+          <div><strong>Name:</strong> ${c.name}</div>
+          <div><strong>Code:</strong> ${c.code}</div>
+          <div><strong>Mobile:</strong> ${c.phone}</div>
+          <div><strong>Join Date:</strong> ${c.joiningDate}</div>
+          <div><strong>Gender:</strong> ${c.gender || 'Male'}</div>
+          <div><strong>Ideal Wt:</strong> ${c.idealWeight} kg</div>
+        </div>
+      `;
+    }
+
+    function showReportModal(title, subtitle, content) {
+      document.getElementById('reportModalTitle').innerHTML = title;
+      document.getElementById('reportSubtitle').innerText = subtitle;
+      document.getElementById('dynamicReportContent').innerHTML = content;
+      new bootstrap.Modal(document.getElementById('reportViewerModal')).show();
+    }
+
+    function triggerCleanPrint() {
+      const content = document.getElementById('previewModalArea').innerHTML;
+      const printWin = window.open('', '', 'width=850,height=900');
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Bharat Wellness Club - Official Report</title>
+          <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+          <style>
+            @page { size: A4 portrait; margin: 8mm 10mm 8mm 10mm; }
+            body { font-family: Arial, sans-serif; color: #000000; background: #ffffff; padding: 0; margin: 0; }
+            .table { border-color: #333333 !important; margin-bottom: 4px !important; }
+            .table th, .table td { padding: 1.8px 3px !important; font-size: 10px !important; line-height: 1.15 !important; text-align: center; }
+            h5 { font-size: 16px; margin: 0; font-weight: bold; color: #1b5e20; }
+            h6 { font-size: 12px; margin: 4px 0; font-weight: bold; color: #1b5e20; }
+          </style>
+        </head>
+        <body onload="window.print(); window.close();">
+          ${content}
+        </body>
+        </html>
+      `);
+      printWin.document.close();
+    }
+
+    function generateSingleProfileReport(cid) {
+      const c = consumers.find(item => item.id === cid);
+      if(!c) return;
+      const chk = checkupData[cid] || {};
+      const chkHTML = `<div style="font-size:11px; padding:6px; border:1px solid #cbd5e1; border-radius:6px;"><strong>Checkup Start (Join):</strong> ${c.joiningDate || chk.start || '-'} | <strong>1st:</strong> ${chk.c1 || '-'} | <strong>2nd:</strong> ${chk.c2 || '-'} | <strong>3rd:</strong> ${chk.c3 || '-'}</div>`;
+      showReportModal('Consumer Profile Slip', c.name, getProfileHTML(c) + chkHTML);
+    }
+
+    function generateAttendanceReportOnly(cid) {
+      const c = consumers.find(item => item.id === cid);
+      if(!c) return;
+      const monthStr = document.getElementById('monthlyAttPicker').value || currentMonthStr;
+      
+      const year = parseInt(monthStr.split('-')[0]);
+      const monthIndex = parseInt(monthStr.split('-')[1]);
+      const totalDays = new Date(year, monthIndex, 0).getDate();
+
+      let presentCount = 0;
+      let gridHTML = '<div style="display:flex; flex-wrap:wrap; gap:3px; margin: 6px 0;">';
+      for (let d = 1; d <= totalDays; d++) {
+        const isPresent = attendanceData[`${monthStr}_${cid}_${d}`] === true;
+        if (isPresent) presentCount++;
+        gridHTML += `<span class="badge ${isPresent ? 'bg-success' : 'bg-light text-muted border'}" style="width:24px; height:18px; line-height:14px; font-size:9px;">${d}</span>`;
+      }
+      gridHTML += '</div>';
+
+      const attContentHTML = `
+        <div style="margin-bottom: 6px;">
+          <h6 style="border-bottom:1px solid #1b5e20; padding-bottom:2px;"><i class="fa-solid fa-calendar-check me-1"></i> Attendance Record (${monthStr})</h6>
+          ${gridHTML}
+          <div style="display:flex; justify-content:space-between; background:#f8fafc; border:1px solid #cbd5e1; padding:4px 8px; border-radius:4px; font-size:11px;">
+            <span><strong>Total Days:</strong> ${totalDays}</span>
+            <span class="text-success"><strong>Present:</strong> ${presentCount} Days</span>
+            <span class="text-danger"><strong>Absent:</strong> ${totalDays - presentCount} Days</span>
+          </div>
+        </div>
+      `;
+
+      showReportModal('Attendance Report Slip', c.name, getProfileHTML(c) + attContentHTML);
+    }
+
+    function generateBTGReportOnly(cid) {
+      const c = consumers.find(item => item.id === cid);
+      if(!c) return;
+      const monthStr = document.getElementById('btgModalMonthInput').value || currentMonthStr;
+
+      let btgTableHTML = `
+        <h6 style="border-bottom:1px solid #1b5e20; padding-bottom:2px;">Food (BTG) Diet Record - ${monthStr}</h6>
+        <table class="table table-bordered table-sm">
+          <thead class="table-light">
+            <tr><th>Day</th><th>Afresh</th><th>BF Shake</th><th>Snacks</th><th>Salad</th><th>Lunch</th><th>Af-Lunch</th><th>Snacks</th><th>DN Shake</th></tr>
+          </thead>
+          <tbody>
+      `;
+
+      const year = parseInt(monthStr.split('-')[0]);
+      const monthIndex = parseInt(monthStr.split('-')[1]);
+      const totalDays = new Date(year, monthIndex, 0).getDate();
+
+      for (let d = 1; d <= totalDays; d++) {
+        const dateStr = `${monthStr}-${d < 10 ? '0' + d : d}`;
+        const rowData = btgData[`${dateStr}_${cid}`] || {};
+        let cols = '';
+        btgFields.forEach(f => {
+          cols += `<td>${rowData[f.key] ? '✔' : '-'}</td>`;
+        });
+        btgTableHTML += `<tr><td style="font-weight:bold;">${d}</td>${cols}</tr>`;
+      }
+      btgTableHTML += `</tbody></table>`;
+
+      showReportModal('BTG Food Diet Report', c.name, getProfileHTML(c) + btgTableHTML);
+    }
+
+    function generateBMIReportOnly(cid) {
+      const c = consumers.find(item => item.id === cid);
+      if(!c) return;
+
+      let list = bmiRecords.filter(r => r.consumerId === cid);
+      list.sort((a,b) => new Date(a.date) - new Date(b.date));
+
+      let rowsHTML = '';
+      if (list.length === 0) {
+        rowsHTML = `<tr><td colspan="9" class="text-muted">Koi evaluation record upload nahi hai.</td></tr>`;
+      } else {
+        list.forEach((r, i) => {
+          rowsHTML += `
+            <tr>
+              <td><strong>${r.date}</strong></td>
+              <td class="text-success fw-bold">${r.weight} kg</td>
+              <td>${r.bmi}</td><td>${r.vfa}</td><td>${r.fat}%</td>
+              <td>${r.bodyAge} yrs</td><td>${r.rm} kcal</td><td>${r.sm}%</td><td>${r.waist}</td>
+            </tr>
+          `;
+        });
+      }
+
+      const bmiContentHTML = `
+        <div style="margin-bottom: 6px;">
+          <h6 style="border-bottom:1px solid #1b5e20; padding-bottom:2px;"><i class="fa-solid fa-weight-scale me-1"></i> Body Composition & Wellness Analysis</h6>
+          <table class="table table-bordered table-sm mt-1">
+            <thead class="table-light">
+              <tr><th>Date</th><th>Weight</th><th>BMI</th><th>VFA</th><th>Fat %</th><th>Body Age</th><th>R.M.</th><th>S.M. %</th><th>Waist</th></tr>
+            </thead>
+            <tbody>${rowsHTML}</tbody>
+          </table>
+        </div>
+      `;
+
+      showReportModal('Wellness (BMI) Evaluation Report', c.name, getProfileHTML(c) + bmiContentHTML);
+    }
+
+    function generateCheckupReportOnly(cid) {
+      const c = consumers.find(item => item.id === cid);
+      if(!c) return;
+      const chk = checkupData[cid] || {};
+      const startDate = c.joiningDate || chk.start || '-';
+
+      const checkupTableHTML = `
+        <h6 style="border-bottom:1px solid #1b5e20; padding-bottom:2px;">Follow-up Checkup Tracking</h6>
+        <table class="table table-bordered table-sm mt-1">
+          <thead class="table-light">
+            <tr><th>Start (Join Date)</th><th>1st</th><th>2nd</th><th>3rd</th><th>4th</th><th>5th</th><th>6th</th><th>7th</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>${startDate}</strong></td>
+              <td>${chk.c1 || '-'}</td><td>${chk.c2 || '-'}</td><td>${chk.c3 || '-'}</td>
+              <td>${chk.c4 || '-'}</td><td>${chk.c5 || '-'}</td><td>${chk.c6 || '-'}</td><td>${chk.c7 || '-'}</td>
+            </tr>
+          </tbody>
+        </table>
+        ${chk.r1 ? `<div style="font-size:11px; background:#f8fafc; border:1px solid #cbd5e1; padding:4px 8px; border-radius:4px; margin-top:4px;"><strong>Remarks:</strong> ${chk.r1}</div>` : ''}
+      `;
+
+      showReportModal('Checkup Progress Report', c.name, getProfileHTML(c) + checkupTableHTML);
+    }
+
+    // COMPLETE ALL-IN-ONE COMBO HEALTH REPORT
+    function generateComboReport() {
+      const cid = parseInt(document.getElementById('reportGenConsumer').value);
+      if(!cid) return alert('Consumer select karein!');
+      const c = consumers.find(item => item.id === cid);
+      if(!c) return;
+
+      const incProfile = document.getElementById('chkRepProfile').checked;
+      const incBMI = document.getElementById('chkRepBMI').checked;
+      const incAtt = document.getElementById('chkRepAtt').checked;
+      const incBTG = document.getElementById('chkRepBTG').checked;
+      const incCheckup = document.getElementById('chkRepCheckup').checked;
+      const incSales = document.getElementById('chkRepSales').checked;
+
+      let comboHTML = '';
+
+      if (incProfile) comboHTML += getProfileHTML(c);
+
+      if (incBMI) {
+        let list = bmiRecords.filter(r => r.consumerId === cid);
+        list.sort((a,b) => new Date(a.date) - new Date(b.date));
+        let rowsHTML = '';
+        if (list.length === 0) {
+          rowsHTML = `<tr><td colspan="9" class="text-muted">Koi evaluation record nahi hai.</td></tr>`;
+        } else {
+          list.forEach(r => {
+            rowsHTML += `
+              <tr>
+                <td><strong>${r.date}</strong></td>
+                <td class="text-success fw-bold">${r.weight} kg</td>
+                <td>${r.bmi}</td><td>${r.vfa}</td><td>${r.fat}%</td>
+                <td>${r.bodyAge} yrs</td><td>${r.rm} kcal</td><td>${r.sm}%</td><td>${r.waist}</td>
+              </tr>
+            `;
+          });
+        }
+        comboHTML += `
+          <div style="margin-bottom: 6px;">
+            <h6 style="border-bottom:1px solid #1b5e20; padding-bottom:2px;"><i class="fa-solid fa-weight-scale me-1"></i> Body Composition & Wellness</h6>
+            <table class="table table-bordered table-sm mt-1">
+              <thead class="table-light">
+                <tr><th>Date</th><th>Weight</th><th>BMI</th><th>VFA</th><th>Fat %</th><th>Body Age</th><th>R.M.</th><th>S.M. %</th><th>Waist</th></tr>
+              </thead>
+              <tbody>${rowsHTML}</tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      if (incAtt) {
+        const monthStr = currentMonthStr;
+        const year = parseInt(monthStr.split('-')[0]);
+        const monthIndex = parseInt(monthStr.split('-')[1]);
+        const totalDays = new Date(year, monthIndex, 0).getDate();
+
+        let presentCount = 0;
+        let gridHTML = '<div style="display:flex; flex-wrap:wrap; gap:3px; margin: 4px 0;">';
+        for (let d = 1; d <= totalDays; d++) {
+          const isPresent = attendanceData[`${monthStr}_${cid}_${d}`] === true;
+          if (isPresent) presentCount++;
+          gridHTML += `<span class="badge ${isPresent ? 'bg-success' : 'bg-light text-muted border'}" style="width:22px; height:18px; line-height:14px; font-size:9px;">${d}</span>`;
+        }
+        gridHTML += '</div>';
+
+        comboHTML += `
+          <div style="margin-bottom: 6px;">
+            <h6 style="border-bottom:1px solid #1b5e20; padding-bottom:2px;"><i class="fa-solid fa-calendar-check me-1"></i> Live Attendance (${monthStr})</h6>
+            ${gridHTML}
+            <div style="display:flex; justify-content:space-between; background:#f8fafc; border:1px solid #cbd5e1; padding:3px 8px; border-radius:4px; font-size:11px;">
+              <span><strong>Total:</strong> ${totalDays} Days</span>
+              <span class="text-success"><strong>Present:</strong> ${presentCount} Days</span>
+              <span class="text-danger"><strong>Absent:</strong> ${totalDays - presentCount} Days</span>
+            </div>
+          </div>
+        `;
+      }
+
+      if (incBTG) {
+        const monthStr = currentMonthStr;
+        const year = parseInt(monthStr.split('-')[0]);
+        const monthIndex = parseInt(monthStr.split('-')[1]);
+        const totalDays = new Date(year, monthIndex, 0).getDate();
+
+        let btgRows = '';
+        for (let d = 1; d <= totalDays; d++) {
+          const dateStr = `${monthStr}-${d < 10 ? '0' + d : d}`;
+          const rowData = btgData[`${dateStr}_${cid}`] || {};
+          let cols = '';
+          btgFields.forEach(f => {
+            cols += `<td>${rowData[f.key] ? '✔' : '-'}</td>`;
+          });
+          btgRows += `<tr><td style="font-weight:bold;">${d}</td>${cols}</tr>`;
+        }
+
+        comboHTML += `
+          <div style="margin-bottom: 6px;">
+            <h6 style="border-bottom:1px solid #1b5e20; padding-bottom:2px;"><i class="fa-solid fa-utensils me-1"></i> Food (BTG) Diet Tracking - ${monthStr}</h6>
+            <table class="table table-bordered table-sm">
+              <thead class="table-light">
+                <tr><th>Day</th><th>Afresh</th><th>BF Shake</th><th>Snacks</th><th>Salad</th><th>Lunch</th><th>Af-Lunch</th><th>Snacks</th><th>DN Shake</th></tr>
+              </thead>
+              <tbody>${btgRows}</tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      if (incCheckup) {
+        const chk = checkupData[cid] || {};
+        const startDate = c.joiningDate || chk.start || '-';
+        comboHTML += `
+          <div style="margin-bottom: 6px;">
+            <h6 style="border-bottom:1px solid #1b5e20; padding-bottom:2px;"><i class="fa-solid fa-stethoscope me-1"></i> Checkup Follow-up Progress</h6>
+            <table class="table table-bordered table-sm mt-1">
+              <thead class="table-light">
+                <tr><th>Start (Join Date)</th><th>1st</th><th>2nd</th><th>3rd</th><th>4th</th><th>5th</th><th>6th</th><th>7th</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>${startDate}</strong></td>
+                  <td>${chk.c1 || '-'}</td><td>${chk.c2 || '-'}</td><td>${chk.c3 || '-'}</td>
+                  <td>${chk.c4 || '-'}</td><td>${chk.c5 || '-'}</td><td>${chk.c6 || '-'}</td><td>${chk.c7 || '-'}</td>
+                </tr>
+              </tbody>
+            </table>
+            ${chk.r1 ? `<div style="font-size:11px; background:#f8fafc; border:1px solid #cbd5e1; padding:4px 8px; border-radius:4px; margin-top:4px;"><strong>Remarks:</strong> ${chk.r1}</div>` : ''}
+          </div>
+        `;
+      }
+
+      if (incSales) {
+        let list = salesRecords.filter(r => r.consumerId === cid);
+        list.sort((a,b) => new Date(a.date) - new Date(b.date));
+        let salesRows = '';
+        let totalItems = 0;
+
+        if (list.length === 0) {
+          salesRows = `<tr><td colspan="4" class="text-muted">Koi Product Tracking history nahi hai.</td></tr>`;
+        } else {
+          list.forEach((r, i) => {
+            totalItems += parseInt(r.qty);
+            salesRows += `
+              <tr>
+                <td>${i + 1}</td>
+                <td>${r.date}</td>
+                <td class="text-start">${r.productName}</td>
+                <td><strong>${r.qty}</strong></td>
+              </tr>
+            `;
+          });
+        }
+
+        comboHTML += `
+          <div style="margin-bottom: 6px;">
+            <h6 style="border-bottom:1px solid #1b5e20; padding-bottom:2px;"><i class="fa-solid fa-boxes-stacked me-1"></i> Product Tracking Record</h6>
+            <table class="table table-bordered table-sm mt-1">
+              <thead class="table-light">
+                <tr><th style="width:40px;">Sr.</th><th>Date</th><th class="text-start">Product</th><th style="width:90px;">Quantity</th></tr>
+              </thead>
+              <tbody>${salesRows}</tbody>
+            </table>
+            <div style="display:flex; justify-content:space-between; background:#f8fafc; border:1px solid #cbd5e1; padding:3px 8px; border-radius:4px; font-size:11px;">
+              <span><strong>Total Deliveries:</strong> ${list.length}</span>
+              <span class="text-success"><strong>Total Units Provided:</strong> ${totalItems} Units</span>
+            </div>
+          </div>
+        `;
+      }
+
+      showReportModal('Complete Health Combo Report', c.name, comboHTML);
+    }
+
+    // 9. BACKUP & EXPORT
+    function exportDataBackup() {
+      const fullBackup = { app: "BharatWellnessClub", backupDate: new Date().toISOString(), consumers, coaches, attendance: attendanceData, btg: btgData, checkup: checkupData, bmiRecords, salesRecords };
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fullBackup, null, 2)));
+      downloadAnchor.setAttribute("download", `BWC_Backup_${todayStr}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    function importDataBackup() {
+      const fileInput = document.getElementById('restoreFileInput');
+      if (!fileInput.files || fileInput.files.length === 0) return alert('Backup file select karein!');
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          if (parsed.consumers) db.ref('consumers').set(parsed.consumers);
+          if (parsed.attendance) db.ref('attendance').set(parsed.attendance);
+          if (parsed.btg) db.ref('btg').set(parsed.btg);
+          if (parsed.checkup) db.ref('checkups').set(parsed.checkup);
+          if (parsed.bmiRecords) db.ref('bmiRecords').set(parsed.bmiRecords);
+          if (parsed.salesRecords) db.ref('salesRecords').set(parsed.salesRecords);
+          if (parsed.coaches) db.ref('coaches').set(parsed.coaches);
+          alert('Data restored successfully!');
+        } catch(err) { alert('Invalid file!'); }
+      };
+      reader.readAsText(fileInput.files[0]);
+    }
+  </script>
+
+
+</body></html>

@@ -11,6 +11,48 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
+  <script>
+    var currentUser = JSON.parse(sessionStorage.getItem('bwc_session_user')) || null;
+    var coaches = [];
+
+    function quickLogin(role, coachId, coachName) {
+      try {
+        if (role === 'ADMIN') {
+          currentUser = { id: 'ADMIN', name: 'Master Admin', role: 'ADMIN' };
+        } else {
+          let matchedCoach = coaches.find(co => co.id === coachId || co.phone === coachId || (co.code && co.code.toLowerCase() === (coachId || '').toLowerCase()));
+          if (!matchedCoach && coachId && coachId !== 'COACH_DEMO') {
+            matchedCoach = coaches.find(co => co.id === coachId);
+          }
+          if (!matchedCoach) {
+            matchedCoach = coaches.length > 0 && coachId !== 'COACH_DEMO' ? coaches[0] : { id: 'COACH_DEMO', name: coachName || 'Demo Coach', role: 'COACH' };
+          }
+          currentUser = { id: matchedCoach.id, name: matchedCoach.name, role: 'COACH' };
+        }
+        sessionStorage.setItem('bwc_session_user', JSON.stringify(currentUser));
+        const authEl = document.getElementById('authOverlay');
+        if (authEl) authEl.style.display = 'none';
+        if (typeof applyRoleView === 'function') applyRoleView();
+        if (typeof refreshUI === 'function') refreshUI();
+        if (typeof checkDeviceView === 'function') checkDeviceView();
+      } catch (err) {
+        console.error('quickLogin error:', err);
+        const authEl = document.getElementById('authOverlay');
+        if (authEl) authEl.style.display = 'none';
+      }
+    }
+
+    function quickLoginCoach() {
+      const select = document.getElementById('loginCoachSelect');
+      const coachId = select ? select.value : 'COACH_DEMO';
+      let coachName = 'Demo Coach';
+      if (select && select.selectedIndex >= 0) {
+        coachName = select.options[select.selectedIndex].text.replace(/^[^\w\u0900-\u097F]+/, '').trim();
+      }
+      quickLogin('COACH', coachId, coachName);
+    }
+  </script>
+
   <style>
     :root {
       --primary-color: #1b5e20;
@@ -839,21 +881,19 @@
       { id: "0316", name: "H24 Rebuild Strength (10 Sachets)", vp: 24.70, mrp: 2616, keys: "h24 rebuild strength rs 0316" }
     ];
 
-    let consumers = [];
-    let coaches = [];
-    let attendanceData = {};
-    let btgData = {};
-    let checkupData = {};
-    let bmiRecords = [];
-    let salesRecords = [];
-    let adminPass = null;
+    var consumers = [];
+    var attendanceData = {};
+    var btgData = {};
+    var checkupData = {};
+    var bmiRecords = [];
+    var salesRecords = [];
+    var adminPass = null;
 
-    let currentUser = JSON.parse(sessionStorage.getItem('bwc_session_user')) || null;
-    let selectedCoachFilter = 'ALL';
-    let isMonthViewActive = false;
-    let activeBtgModalConsumerId = null;
+    var selectedCoachFilter = 'ALL';
+    var isMonthViewActive = false;
+    var activeBtgModalConsumerId = null;
 
-    let dismissedCheckups = JSON.parse(localStorage.getItem('bwc_dismissed_notifications') || '[]');
+    var dismissedCheckups = JSON.parse(localStorage.getItem('bwc_dismissed_notifications') || '[]');
 
     const today = new Date();
     const todayStr = today.toISOString().slice(0, 10);
