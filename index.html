@@ -185,32 +185,41 @@
 </head>
 <body>
 
-  <!-- AUTH SCREEN -->
+  <!-- AUTH SCREEN (TESTING / PASSWORD-FREE LOGIN) -->
   <div id="authOverlay" class="no-print">
     <div class="auth-card text-center">
       <div class="mb-3 text-success"><i class="fa-solid fa-heart-pulse fa-3x"></i></div>
       <h4 class="fw-bold text-dark mb-1">BHARAT WELLNESS CLUB</h4>
-      <p class="text-muted small mb-4">Secure Cloud Login</p>
-      <form id="loginAuthForm">
-        <div class="mb-3 text-start">
-          <label class="form-label small fw-bold text-dark">Portal Role</label>
-          <select id="loginRoleSelect" class="form-select" onchange="toggleLoginInputs()">
-            <option value="ADMIN">Master Admin (Owner)</option>
-            <option value="COACH">Coach Portal</option>
-          </select>
-        </div>
-        <div class="mb-3 text-start d-none" id="coachUsernameGroup">
-          <label class="form-label small fw-bold text-dark">Mobile Number / Coach ID</label>
-          <input type="text" id="loginCoachUsername" class="form-control" placeholder="Enter Mobile Number">
-        </div>
-        <div class="mb-4 text-start">
-          <label class="form-label small fw-bold text-dark">Security PIN / Password</label>
-          <input type="password" id="loginPasswordInput" class="form-control" required placeholder="Enter Security Password">
-        </div>
-        <button type="submit" class="btn btn-success w-100 py-2 fw-bold shadow-sm">
-          <i class="fa-solid fa-right-to-bracket me-2"></i> Login to Portal
+      <p class="text-muted small mb-3">Multi-Coach Cloud Portal</p>
+      
+      <div class="alert alert-success py-2 px-3 small fw-bold mb-3 border-0 shadow-sm d-flex align-items-center justify-content-center gap-2">
+        <i class="fa-solid fa-circle-check text-success"></i>
+        <span>Testing Mode: Password Free Login Active</span>
+      </div>
+
+      <div class="d-grid gap-2 mb-3">
+        <button type="button" class="btn btn-success py-2 fw-bold shadow-sm" onclick="quickLogin('ADMIN')">
+          <i class="fa-solid fa-crown me-2"></i> Direct Login as Master Admin
         </button>
-      </form>
+      </div>
+
+      <div class="card p-3 bg-light border-0 rounded-3 text-start mb-2 shadow-sm">
+        <label class="form-label small fw-bold text-dark mb-1">
+          <i class="fa-solid fa-user-tie text-success me-1"></i> Or Login as Coach:
+        </label>
+        <div class="input-group">
+          <select id="loginCoachSelect" class="form-select form-select-sm fw-semibold">
+            <option value="COACH_DEMO">👤 Demo Coach</option>
+          </select>
+          <button type="button" class="btn btn-primary btn-sm fw-bold px-3" onclick="quickLoginCoach()">
+            <i class="fa-solid fa-arrow-right-to-bracket me-1"></i> Login
+          </button>
+        </div>
+      </div>
+
+      <div class="text-muted mt-2" style="font-size: 0.75rem;">
+        <i class="fa-solid fa-bolt text-warning me-1"></i> 1-Click Fast Login Active for Testing
+      </div>
     </div>
   </div>
 
@@ -684,7 +693,7 @@
             <div class="mb-2"><label class="form-label small fw-bold">Name *</label><input type="text" id="coachName" class="form-control form-control-sm" required></div>
             <div class="mb-2"><label class="form-label small fw-bold">Mobile (Username) *</label><input type="tel" id="coachPhone" class="form-control form-control-sm" required></div>
             <div class="mb-2"><label class="form-label small fw-bold">Coach ID *</label><input type="text" id="coachCode" class="form-control form-control-sm" required placeholder="COACH-01"></div>
-            <div class="mb-3"><label class="form-label small fw-bold text-success">Password PIN *</label><input type="password" id="coachPass" class="form-control form-control-sm" required></div>
+            <div class="mb-3"><label class="form-label small fw-bold text-success">Password PIN (Optional)</label><input type="password" id="coachPass" class="form-control form-control-sm" placeholder="Default: 1234 (Optional)"></div>
             <button type="submit" class="btn btn-success w-100">Save Coach</button>
           </form>
         </div>
@@ -950,54 +959,35 @@
       }
     }
 
-    function toggleLoginInputs() {
-      const role = document.getElementById('loginRoleSelect').value;
-      const usernameGroup = document.getElementById('coachUsernameGroup');
-      if (role === 'COACH') {
-        usernameGroup.classList.remove('d-none');
-        document.getElementById('loginCoachUsername').setAttribute('required', 'required');
+    function quickLogin(role, coachId, coachName) {
+      if (role === 'ADMIN') {
+        currentUser = { id: 'ADMIN', name: 'Master Admin', role: 'ADMIN' };
       } else {
-        usernameGroup.classList.add('d-none');
-        document.getElementById('loginCoachUsername').removeAttribute('required');
+        let matchedCoach = coaches.find(co => co.id === coachId || co.phone === coachId || (co.code && co.code.toLowerCase() === (coachId || '').toLowerCase()));
+        if (!matchedCoach && coachId && coachId !== 'COACH_DEMO') {
+          matchedCoach = coaches.find(co => co.id === coachId);
+        }
+        if (!matchedCoach) {
+          matchedCoach = coaches.length > 0 && coachId !== 'COACH_DEMO' ? coaches[0] : { id: 'COACH_DEMO', name: coachName || 'Demo Coach', role: 'COACH' };
+        }
+        currentUser = { id: matchedCoach.id, name: matchedCoach.name, role: 'COACH' };
       }
+      sessionStorage.setItem('bwc_session_user', JSON.stringify(currentUser));
+      document.getElementById('authOverlay').style.display = 'none';
+      applyRoleView();
+      refreshUI();
+      checkDeviceView();
     }
 
-    document.getElementById('loginAuthForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-      const role = document.getElementById('loginRoleSelect').value;
-      const inputPass = document.getElementById('loginPasswordInput').value.trim();
-
-      if (role === 'ADMIN') {
-        const expectedPass = adminPass ? adminPass : "1234";
-
-        if (inputPass === expectedPass) {
-          currentUser = { id: 'ADMIN', name: 'Master Admin', role: 'ADMIN' };
-          sessionStorage.setItem('bwc_session_user', JSON.stringify(currentUser));
-          document.getElementById('authOverlay').style.display = 'none';
-          applyRoleView();
-          refreshUI();
-          checkDeviceView();
-          this.reset();
-        } else {
-          alert('Galat Password! Kripya sahi PIN/Password dalein.');
-        }
-      } else {
-        const inputUsername = document.getElementById('loginCoachUsername').value.trim();
-        const matchedCoach = coaches.find(co => (co.phone === inputUsername || co.code.toLowerCase() === inputUsername.toLowerCase()) && co.password === inputPass);
-
-        if (matchedCoach) {
-          currentUser = { id: matchedCoach.id, name: matchedCoach.name, role: 'COACH' };
-          sessionStorage.setItem('bwc_session_user', JSON.stringify(currentUser));
-          document.getElementById('authOverlay').style.display = 'none';
-          applyRoleView();
-          refreshUI();
-          checkDeviceView();
-          this.reset();
-        } else {
-          alert('Incorrect Mobile Number or PIN! Kripya sahi detail dalein.');
-        }
+    function quickLoginCoach() {
+      const select = document.getElementById('loginCoachSelect');
+      const coachId = select ? select.value : 'COACH_DEMO';
+      let coachName = 'Demo Coach';
+      if (select && select.selectedIndex >= 0) {
+        coachName = select.options[select.selectedIndex].text.replace(/^[^\w\u0900-\u097F]+/, '').trim();
       }
-    });
+      quickLogin('COACH', coachId, coachName);
+    }
 
     function logoutUser() {
       if (confirm('Portal se logout karna chahte hain?')) {
@@ -2106,12 +2096,15 @@
     function updateCoachDropdowns() {
       const coachSelect = document.getElementById('mAssignCoach');
       const adminFilter = document.getElementById('adminCoachFilter');
+      const loginCoachSelect = document.getElementById('loginCoachSelect');
       if (coachSelect) coachSelect.innerHTML = '<option value="ADMIN">Master Admin (Direct)</option>';
       if (adminFilter) adminFilter.innerHTML = '<option value="ALL">🌟 All Coaches (Full Team)</option>';
+      if (loginCoachSelect) loginCoachSelect.innerHTML = '<option value="COACH_DEMO">👤 Demo Coach</option>';
 
       coaches.forEach(co => {
         if (coachSelect) coachSelect.innerHTML += `<option value="${co.id}">${co.name} (${co.code})</option>`;
         if (adminFilter) adminFilter.innerHTML += `<option value="${co.id}">Coach: ${co.name}</option>`;
+        if (loginCoachSelect) loginCoachSelect.innerHTML += `<option value="${co.id}">🧑‍💼 ${co.name} (${co.phone || co.code})</option>`;
       });
     }
 
@@ -2123,12 +2116,13 @@
     document.getElementById('coachForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const coachId = 'COACH_' + Date.now();
+      const enteredPass = document.getElementById('coachPass').value.trim();
       db.ref('coaches/' + coachId).set({
         id: coachId,
         name: document.getElementById('coachName').value.trim(),
         phone: document.getElementById('coachPhone').value.trim(),
         code: document.getElementById('coachCode').value.trim(),
-        password: document.getElementById('coachPass').value.trim()
+        password: enteredPass || '1234'
       });
       bootstrap.Modal.getInstance(document.getElementById('addCoachModal')).hide();
       this.reset();
