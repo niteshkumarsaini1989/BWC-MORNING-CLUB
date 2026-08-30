@@ -7,12 +7,22 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
+  
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
   <script>
-    var currentUser = JSON.parse(sessionStorage.getItem('bwc_session_user')) || null;
+    var currentUser = null;
+    try {
+      var savedUser = sessionStorage.getItem('bwc_session_user');
+      if (savedUser && savedUser !== 'undefined') {
+        currentUser = JSON.parse(savedUser);
+      }
+    } catch(e) {
+      currentUser = null;
+    }
     var coaches = [];
 
     function isMobileView() { return window.innerWidth <= 992; }
@@ -90,6 +100,9 @@
       try {
         if (role === 'ADMIN') {
           currentUser = { id: 'ADMIN', name: 'Master Admin', role: 'ADMIN' };
+          const coachFilter = document.getElementById('adminCoachFilter');
+          if (coachFilter) coachFilter.value = 'ALL';
+          if (typeof selectedCoachFilter !== 'undefined') selectedCoachFilter = 'ALL';
         } else {
           let matchedCoach = coaches.find(co => co.id === coachId || co.phone === coachId || (co.code && co.code.toLowerCase() === (coachId || '').toLowerCase()));
           if (!matchedCoach && coachId && coachId !== 'COACH_DEMO') {
@@ -994,6 +1007,17 @@
       { id: "0316", name: "H24 Rebuild Strength (10 Sachets)", vp: 24.70, mrp: 2616, keys: "h24 rebuild strength rs 0316" }
     ];
 
+    const btgFields = [
+      { key: 'afresh', label: 'Afresh' },
+      { key: 'bf_shake', label: 'BF Shake' },
+      { key: 'snack1', label: 'Snack 1' },
+      { key: 'salad', label: 'Salad' },
+      { key: 'lunch', label: 'Lunch' },
+      { key: 'af_lunch', label: 'Af-Lunch' },
+      { key: 'snack2', label: 'Snack 2' },
+      { key: 'dn_shake', label: 'DN Shake' }
+    ];
+
     var consumers = [];
     var coaches = [];
     var attendanceData = {};
@@ -1136,10 +1160,10 @@
         } else if (parts.length === 1) {
           btgData[parts[0]] = value;
         }
-      } else if (path === 'checkups') {
+      } else if (path === 'checkups' || path === 'checkup') {
         checkupData = value || {};
-      } else if (path.startsWith('checkups/')) {
-        const id = path.substring('checkups/'.length);
+      } else if (path.startsWith('checkups/') || path.startsWith('checkup/')) {
+        const id = path.includes('checkups/') ? path.substring('checkups/'.length) : path.substring('checkup/'.length);
         checkupData[id] = value;
       } else if (path === 'bmiRecords') {
         bmiRecords = value ? (Array.isArray(value) ? value : Object.values(value)) : [];
@@ -1175,9 +1199,9 @@
         const parts = path.substring('btg/'.length).split('/');
         if (parts.length === 2 && btgData[parts[0]]) delete btgData[parts[0]][parts[1]];
         else if (parts.length === 1) delete btgData[parts[0]];
-      } else if (path === 'checkups') checkupData = {};
-      else if (path.startsWith('checkups/')) {
-        const id = path.substring('checkups/'.length);
+      } else if (path === 'checkups' || path === 'checkup') checkupData = {};
+      else if (path.startsWith('checkups/') || path.startsWith('checkup/')) {
+        const id = path.includes('checkups/') ? path.substring('checkups/'.length) : path.substring('checkup/'.length);
         delete checkupData[id];
       } else if (path === 'bmiRecords') bmiRecords = [];
       else if (path.startsWith('bmiRecords/')) {
@@ -1232,13 +1256,13 @@
     // DEMO DATA LOADER (WORKS ONLINE & OFFLINE)
     function loadDemoData(force = false) {
       if (force || (consumers.length === 0 && coaches.length === 0)) {
-        coaches = JSON.parse(JSON.stringify(defaultDemoData.coaches));
-        consumers = JSON.parse(JSON.stringify(defaultDemoData.consumers));
-        attendanceData = JSON.parse(JSON.stringify(defaultDemoData.attendance));
-        btgData = JSON.parse(JSON.stringify(defaultDemoData.btg));
-        bmiRecords = JSON.parse(JSON.stringify(defaultDemoData.bmiRecords));
-        checkupData = JSON.parse(JSON.stringify(defaultDemoData.checkup));
-        salesRecords = JSON.parse(JSON.stringify(defaultDemoData.salesRecords));
+        coaches = JSON.parse(JSON.stringify(defaultDemoData.coaches || []));
+        consumers = JSON.parse(JSON.stringify(defaultDemoData.consumers || []));
+        attendanceData = JSON.parse(JSON.stringify(defaultDemoData.attendance || {}));
+        btgData = JSON.parse(JSON.stringify(defaultDemoData.btg || {}));
+        bmiRecords = JSON.parse(JSON.stringify(defaultDemoData.bmiRecords || []));
+        checkupData = JSON.parse(JSON.stringify(defaultDemoData.checkups || defaultDemoData.checkup || {}));
+        salesRecords = JSON.parse(JSON.stringify(defaultDemoData.salesRecords || []));
         
         if (db) {
           try {
@@ -1267,9 +1291,6 @@
       setVal('bmiDate', todayStr);
       setVal('salesDate', todayStr);
     }
-    initFormDefaults();
-
-    initCloudListeners();
 
     function initCloudListeners() {
       if (!db) {
@@ -1409,6 +1430,9 @@
     function quickLogin(role, coachId, coachName) {
       if (role === 'ADMIN') {
         currentUser = { id: 'ADMIN', name: 'Master Admin', role: 'ADMIN' };
+        const coachFilter = document.getElementById('adminCoachFilter');
+        if (coachFilter) coachFilter.value = 'ALL';
+        selectedCoachFilter = 'ALL';
       } else {
         let matchedCoach = coaches.find(co => co.id === coachId || co.phone === coachId || (co.code && co.code.toLowerCase() === (coachId || '').toLowerCase()));
         if (!matchedCoach && coachId && coachId !== 'COACH_DEMO') {
@@ -1504,6 +1528,8 @@
         selectedCoachFilter = currentUser.id;
       } else {
         document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('d-none'));
+        const coachFilter = document.getElementById('adminCoachFilter');
+        selectedCoachFilter = coachFilter ? coachFilter.value : 'ALL';
       }
     }
 
@@ -2040,17 +2066,6 @@
     }
 
     // 3. BTG FOOD & MODAL
-    const btgFields = [
-      { key: 'afresh', label: 'Afresh' },
-      { key: 'bf_shake', label: 'BF Shake' },
-      { key: 'snack1', label: 'Snack 1' },
-      { key: 'salad', label: 'Salad' },
-      { key: 'lunch', label: 'Lunch' },
-      { key: 'af_lunch', label: 'Af-Lunch' },
-      { key: 'snack2', label: 'Snack 2' },
-      { key: 'dn_shake', label: 'DN Shake' }
-    ];
-
     function renderBTG() {
       const dateInput = document.getElementById('btgDate');
       const date = dateInput ? dateInput.value : todayStr;
@@ -2418,12 +2433,23 @@
 
     function findMatchingProduct(keyword) {
       if (!keyword) return null;
-      keyword = keyword.trim().toLowerCase();
-      return masterProductsDB.find(p => 
-        p.keys.toLowerCase().includes(keyword) ||
-        p.name.toLowerCase().includes(keyword) ||
-        p.id.toLowerCase() === keyword
+      const fullQuery = keyword.trim().toLowerCase();
+      const terms = fullQuery.split(/\s+/).filter(Boolean);
+      if (terms.length === 0) return null;
+
+      // Direct exact or substring match
+      const direct = masterProductsDB.find(p => 
+        p.id.toLowerCase() === fullQuery ||
+        p.name.toLowerCase().includes(fullQuery) ||
+        p.keys.toLowerCase().includes(fullQuery)
       );
+      if (direct) return direct;
+
+      // Multi-word match: every word in query exists in product SKU, name, or keys
+      return masterProductsDB.find(p => {
+        const combined = `${p.id} ${p.name} ${p.keys}`.toLowerCase();
+        return terms.every(t => combined.includes(t));
+      }) || null;
     }
 
     function handleProductTabKey(e) {
@@ -3127,6 +3153,10 @@
     window.exportDataBackup = exportDataBackup;
     window.importDataBackup = importDataBackup;
     window.loadDemoData = loadDemoData;
+
+    // BOOTSTRAP INITIALIZATION SEQUENCE
+    initFormDefaults();
+    initCloudListeners();
   </script>
 </body>
 </html>

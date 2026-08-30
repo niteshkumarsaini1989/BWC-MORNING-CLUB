@@ -1,7 +1,7 @@
 // ============================================================================
-// BHARAT WELLNESS CLUB - COMPLETE AUTOMATED TEST RUNNER
+// BHARAT WELLNESS CLUB - COMPLETE AUTOMATED TEST SUITE
 // ============================================================================
-(function runBwcTestSuite() {
+(function runBwcMasterSuite() {
   const originalAlert = window.alert;
   const originalConfirm = window.confirm;
   window.alert = function(msg) { /* no-op in automated test */ };
@@ -18,7 +18,7 @@
     }
   }
 
-  function test(name, fn) {
+  function runTest(name, fn) {
     totalCount++;
     try {
       fn();
@@ -33,7 +33,7 @@
   // ----------------------------------------------------
   // TEST 1: Auth & Login Engine
   // ----------------------------------------------------
-  test('1. Auth Overlay & Direct Login as Master Admin', () => {
+  runTest('1. Auth Overlay & Direct Login as Master Admin', () => {
     quickLogin('ADMIN');
     assert(currentUser !== null, 'currentUser should not be null');
     assert(currentUser.role === 'ADMIN', 'currentUser.role should be ADMIN');
@@ -44,7 +44,7 @@
   // ----------------------------------------------------
   // TEST 2: Demo Data Population & Verification (JSON safe)
   // ----------------------------------------------------
-  test('2. Demo Data Population & State Engine (Checkup JSON Parse Safe)', () => {
+  runTest('2. Demo Data Population & Dual-Mode State Engine', () => {
     loadDemoData(true);
     assert(Array.isArray(coaches) && coaches.length >= 4, `Expected >=4 coaches, got ${coaches.length}`);
     assert(Array.isArray(consumers) && consumers.length >= 8, `Expected >=8 consumers, got ${consumers.length}`);
@@ -59,7 +59,7 @@
   // ----------------------------------------------------
   // TEST 3: Navigation & Tab Switching
   // ----------------------------------------------------
-  test('3. Sidebar Navigation & Tab Views Activation', () => {
+  runTest('3. Sidebar Navigation & Tab Views Activation', () => {
     const sections = ['consumers', 'attendance', 'btg', 'bmi', 'checkup', 'productSales', 'reports', 'coaches', 'dataManager', 'advanceSettings'];
     sections.forEach(sec => {
       openSection(sec);
@@ -71,7 +71,7 @@
   // ----------------------------------------------------
   // TEST 4: Role-Based Access Control & Coach Filter
   // ----------------------------------------------------
-  test('4. Role-Based Access Control & Coach Filter', () => {
+  runTest('4. Role-Based Access Control & Coach Filter', () => {
     // 1. Switch to Coach Rahul Sharma
     quickLogin('COACH', 'COACH_101', 'Rahul Sharma');
     assert(currentUser.role === 'COACH', 'Role should be COACH');
@@ -105,7 +105,7 @@
   // ----------------------------------------------------
   // TEST 5: Consumer Master (Auto Code, Ideal Wt, Modal)
   // ----------------------------------------------------
-  test('5. Consumer Master - Auto Code & WHO Ideal Weight Formula', () => {
+  runTest('5. Consumer Master - Auto Code & WHO Ideal Weight Formula', () => {
     openSection('consumers');
     openAddConsumerModal();
     
@@ -127,7 +127,7 @@
   // ----------------------------------------------------
   // TEST 6: Attendance Register & Month View Toggle
   // ----------------------------------------------------
-  test('6. Attendance Management (Daily Toggle & Month Register)', () => {
+  runTest('6. Attendance Management (Daily Toggle & Month Register)', () => {
     openSection('attendance');
     renderDailySheet();
     
@@ -153,7 +153,7 @@
   // ----------------------------------------------------
   // TEST 7: BTG Food Diet Matrix & Modal (btgFields TDZ Safe)
   // ----------------------------------------------------
-  test('7. Food (BTG) Diet Tracking & Consumer Modal Tabs', () => {
+  runTest('7. Food (BTG) Diet Tracking & Consumer Modal Tabs', () => {
     openSection('btg');
     renderBTG();
 
@@ -178,7 +178,7 @@
   // ----------------------------------------------------
   // TEST 8: BMI & Wellness Logs & Filters
   // ----------------------------------------------------
-  test('8. BMI & Wellness Evaluation Logs & Filters', () => {
+  runTest('8. BMI & Wellness Evaluation Logs & Filters', () => {
     openSection('bmi');
     document.getElementById('filterBmiConsumer').value = '1001';
     renderBMIHistory();
@@ -194,7 +194,7 @@
   // ----------------------------------------------------
   // TEST 9: 90-Day Checkup Tracking & Due Reminders
   // ----------------------------------------------------
-  test('9. Checkup Tracking & 90-Day Follow-up Reminders', () => {
+  runTest('9. Checkup Tracking & 90-Day Follow-up Reminders', () => {
     openSection('checkup');
     renderCheckup();
     updateCheckupNotifications();
@@ -209,7 +209,7 @@
   // ----------------------------------------------------
   // TEST 10: Multi-Product Dispatch & Keyword Matching
   // ----------------------------------------------------
-  test('10. Product Tracking - Keyword Auto-complete & Multi-add', () => {
+  runTest('10. Product Tracking - Keyword Auto-complete & Multi-add', () => {
     openSection('productSales');
 
     const f1 = findMatchingProduct('f1 vanilla');
@@ -233,7 +233,7 @@
   // ----------------------------------------------------
   // TEST 11: Reports Center & Printable Slips
   // ----------------------------------------------------
-  test('11. Reports Engine (Single Slips, Attendance, Diet, BMI, Full Combo)', () => {
+  runTest('11. Reports Engine (Single Slips, Attendance, Diet, BMI, Full Combo)', () => {
     openSection('reports');
 
     generateSingleProfileReport(1001);
@@ -259,7 +259,7 @@
   // ----------------------------------------------------
   // TEST 12: Coach Management & Team PIN
   // ----------------------------------------------------
-  test('12. Coach Management & Team PIN Updating', () => {
+  runTest('12. Coach Management & Team PIN Updating', () => {
     openSection('coaches');
     renderCoaches();
     const rows = document.querySelectorAll('#coachTableBody tr').length;
@@ -270,8 +270,7 @@
   window.alert = originalAlert;
   window.confirm = originalConfirm;
 
-  // Return full test results
-  return {
+  window.__bwcTestResults = {
     allPassed: errors.length === 0 && passedCount === totalCount,
     totalCount,
     passedCount,
@@ -279,4 +278,6 @@
     results,
     errors
   };
+
+  return window.__bwcTestResults;
 })();
